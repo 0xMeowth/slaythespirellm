@@ -1,4 +1,4 @@
-"""Seed cards/relics reference tables from /api/exports/eng. Run: uv run python -m ingest.reference"""
+"""Seed cards/relics reference tables from /api/exports/eng. Run: uv run python -m ingest.sync_card_relic_data"""
 
 import io
 import json
