@@ -10,9 +10,9 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 1a Project scaffold | done | none | git init, uv (py3.14), ingest/ + nlq/, CLAUDE.md written to disk |
 | 1b SQLite schema | done | none | schema.sql + ingest/db.py; 9 tables verified |
 | 2a Reference ingest | pending | none | /api/exports/eng → cards, relics |
-| 2b Runs fetcher | pending | none | cursor loop, gzip JSONL, rate-limit aware |
-| 2c Run parser | pending | none | JSON → runs, run_cards, run_relics, run_card_choices |
-| 2d Test pull (1k runs) | pending | none | validate vs /runs/stats |
+| 2b Runs fetcher | done | none | fetch_runs_data.py; cursor loop, 429 backoff |
+| 2c Run parser | done | none | parse_runs_data.py; sha256 PK dedups export's own duplicate lines (~30%!) |
+| 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull (100k recent) | pending | none | start=<date>, ~250MB download |
 | 2f Incremental sync + cron | pending | none | sync_state cursor, sync_log |
 | 3a Schema prompt builder | pending | none | DDL + sample rows for LLM; grill-me phase 3 first |
