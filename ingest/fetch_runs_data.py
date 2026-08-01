@@ -27,9 +27,21 @@ def fetch_pages(
             elif start:
                 params["start"] = start
 
-            resp = client.get(EXPORT_URL, params=params)
+            for attempt in range(5):
+                try:
+                    resp = client.get(EXPORT_URL, params=params)
+                    if resp.status_code >= 500:  # server hiccup: retryable
+                        raise httpx.TransportError(f"server returned {resp.status_code}")
+                    break
+                except httpx.TransportError as e:
+                    if attempt == 4:
+                        raise
+                    wait = 2 ** attempt * 5  # 5s, 10s, 20s, 40s
+                    print(f"transport error ({e}), retry {attempt + 1}/4 in {wait}s", flush=True)
+                    time.sleep(wait)
             if resp.status_code == 429:
-                wait = int(resp.headers.get("Retry-After", "10"))
+                wait = min(max(float(resp.headers.get("Retry-After", "10")), 1), 300)
+                print(f"429 rate-limited, waiting {wait:.0f}s", flush=True)
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
@@ -45,5 +57,9 @@ def fetch_pages(
 
             remaining = int(resp.headers.get("X-RateLimit-Remaining", "10"))
             if remaining <= 1:
-                reset = int(resp.headers.get("X-RateLimit-Reset", "60"))
-                time.sleep(max(reset, 1))
+                # X-RateLimit-Reset is a unix timestamp (float), not a duration
+                reset = float(resp.headers.get("X-RateLimit-Reset", "60"))
+                wait = reset - time.time() if reset > 1e9 else reset
+                wait = min(max(wait, 1), 300)
+                print(f"rate limit exhausted, waiting {wait:.0f}s", flush=True)
+                time.sleep(wait)

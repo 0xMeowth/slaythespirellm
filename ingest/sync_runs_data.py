@@ -28,6 +28,29 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+_sync_started = datetime.now(timezone.utc)
+_first_seen: datetime | None = None
+
+
+def progress(submitted_at: str | None) -> str:
+    """Position in the time window: % done and ETA, derived from cursor timestamps."""
+    global _first_seen
+    if not submitted_at:
+        return ""
+    pos = datetime.fromisoformat(submitted_at).replace(tzinfo=timezone.utc)
+    if _first_seen is None:
+        _first_seen = pos
+        return ""
+    nw = datetime.now(timezone.utc)
+    covered = (pos - _first_seen).total_seconds()
+    remaining = (nw - pos).total_seconds()
+    if covered <= 0:
+        return ""
+    pct = covered / (covered + remaining) * 100
+    eta_min = remaining / (covered / (nw - _sync_started).total_seconds()) / 60
+    return f"  |  at {submitted_at[:10]}  {pct:.1f}%  ~{eta_min:.0f} min left"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", help="ISO date lower bound for a fresh pull, e.g. 2026-06-01")
@@ -74,7 +97,7 @@ def main() -> None:
                         "INSERT OR REPLACE INTO sync_state VALUES ('last_cursor', ?)",
                         (next_cursor,),
                     )
-            print(f"{now()}  +{len(lines)} fetched, {total} new")
+            print(f"{now()}  +{len(lines)} fetched, {total} new{progress(submitted_at)}", flush=True)
             if args.max_runs and total >= args.max_runs:
                 break
         status = "ok"
