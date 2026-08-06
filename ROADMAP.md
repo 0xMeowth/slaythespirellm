@@ -14,13 +14,14 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2c Run parser | done | none | parse_runs_data.py; sha256 PK dedups export's own duplicate lines (~30%!) |
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
-| 2f Incremental sync + cron | pending | none | sync_state cursor, sync_log |
-| 3a Schema prompt builder | pending | none | DDL + sample rows for LLM; grill-me phase 3 first |
-| 3b SQL validator | pending | none | single stmt, SELECT-only, read-only conn |
-| 3c Generate + retry loop | pending | none | error feedback, 2–3 retries |
-| 3d Answer synthesis | pending | none | NL answer + show SQL |
-| 3e Router | pending | none | stats (SQL) vs strategy (declined in v1) |
-| 3f Eval set | pending | none | 10 questions with expected answers |
+| 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
+| 3a Eval dataset + grader | pending | none | ~40 gold questions; compare generated-SQL rows with gold-SQL rows |
+| 3b Model + schema context | pending | none | LangChain, OpenAI-compatible model config, expose only approved tables |
+| 3c SQL guardrails | pending | none | sqlglot validation, table allowlist, read-only execution limits |
+| 3d LangGraph pipeline | pending | none | router → generate → validate → execute; retry failures up to 3 times |
+| 3e Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
+| 3f Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
+| 3g Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
 | 4a Chat web UI | pending | none | thin frontend over nlq |
 | 4b Deploy | pending | none | portfolio hosting TBD |
 
@@ -30,7 +31,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 |-------|-------|----------------|
 | 1 Foundation | 1a–1b | — |
 | 2 Ingestion | 2a–2f | 1b schema |
-| 3 Text-to-SQL | 3a–3f | 2d data present |
+| 3 Text-to-SQL | 3a–3g | 2d data present |
 | 4 Web UI | 4a–4b | 3 pipeline works |
 
 ## Phase 1 — Foundation
@@ -55,15 +56,118 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 - **2f Incremental sync + cron**: resume from sync_state cursor; sync_log start/finish rows; crontab entry.
   **Verification:** run sync twice, second run fetches only new runs, no duplicate PKs
 
-## Phase 3 — Text-to-SQL (run grill-me before starting)
+## Phase 3 — Text-to-SQL
 
-- **3a Schema prompt builder**: DDL + N sample rows per table → system prompt.
-- **3b SQL validator**: sqlglot parse, single statement, SELECT-only; read-only connection.
-- **3c Generate + retry loop**: on SQL error feed error back, max 2–3 retries.
-- **3d Answer synthesis**: result rows → NL answer, show SQL alongside.
-- **3e Router**: classify stats vs strategy; decline strategy in v1.
-- **3f Eval set**: 10 hand-written questions with expected answers.
-  **Verification (phase):** eval script passes ≥ 8/10
+### Architecture
+
+Use LangChain for model and schema integrations, and LangGraph for branching, shared
+state, and the validation/execution retry loop. The model uses an OpenAI-compatible
+interface so SEA-LION and GLM can be evaluated without changing pipeline code.
+
+Graph flow:
+
+`question → router → optional entity linking → optional example retrieval → generate SQL → validate → execute → synthesize`
+
+- Router declines strategy, off-topic, and unusable questions in v1.
+- Ambiguous entity matches return a clarification question instead of generating SQL.
+- Validation or execution errors return to SQL generation with the error in graph state.
+- Stop after three generation attempts and report an honest failure.
+- Trace every graph execution in Langfuse.
+
+### Build Order
+
+- **3a Eval dataset + grader**: create roughly 40 questions across real player queries,
+  schema edge cases, router cases, and adversarial inputs. Each stats question stores
+  verified gold SQL. Grade execution accuracy by comparing generated-SQL result rows
+  against gold-SQL result rows on the same database snapshot; do not compare SQL text
+  or natural-language phrasing.
+- **3b Model + schema context**: configure LangChain against an OpenAI-compatible
+  endpoint (`base_url` + model name). Render only approved analytical tables into the
+  schema context; omit raw_runs, sync_state, and sync_log. Include concise column and
+  domain descriptions plus a small number of sample rows.
+- **3c SQL guardrails**: use sqlglot to require one parseable SELECT statement and
+  enforce a table allowlist. Execute only through SQLite's read-only connection with
+  a query timeout and result-row cap.
+- **3d LangGraph pipeline**: define typed per-question state containing question,
+  route, SQL, error, attempt count, rows, and answer. Add nodes for routing, generation,
+  validation, execution, and retry control.
+- **3e Answer synthesis**: turn successful result rows into a concise answer and return
+  the generated SQL for transparency. Core v1 evals grade rows, not prose; answer
+  faithfulness judging is optional later work.
+- **3f Langfuse observability**: record one trace per question and spans for graph nodes,
+  including prompts, model outputs, timing, token usage, errors, and execution-accuracy
+  scores. Group full eval sweeps as named experiments for before/after comparison.
+- **3g Accuracy experiments**: start with a measurable baseline, then test semantic SQL
+  views, entity linking, and few-shot retrieval separately. Change one variable per
+  experiment while holding the model, dataset, and other settings fixed. Keep additions
+  that improve held-out results; record each experiment's accuracy change.
+
+### Evaluation Protocol
+
+- Maintain separate example-library/development data and held-out test questions. A
+  held-out question or its gold SQL must never be available to few-shot retrieval or
+  prompt optimization.
+- Use development questions to choose prompts, thresholds, examples, and graph settings.
+  Report final model and A/B results on held-out questions.
+- Treat execution accuracy as the primary metric: generated SQL and gold SQL must
+  produce equivalent results on the same database snapshot.
+- The result comparator must support scalar aggregates, tabular results, float
+  tolerances, order-sensitive rankings, and order-insensitive result sets.
+- Record valid-SQL rate, execution-success rate, router accuracy, first-attempt
+  accuracy, retry recovery rate, soft result F1, latency, token usage, and guardrail
+  rejection rates as secondary metrics.
+- Tag questions by tables and concepts. Quantify failures by category: parse error,
+  invented table, invented column, wrong join, missing filter, wrong aggregation,
+  missing DISTINCT, timeout, and result mismatch.
+- Use Langfuse experiment names to compare baseline and one-variable variants. Store
+  prompts, model settings, dataset version, and aggregate/per-tag scores with each run.
+
+### Entity Linking
+
+- Map user mentions such as `gold axe` to canonical database entities such as
+  `cards.card_id = 'GOLD_AXE'` before SQL generation.
+- Use deterministic normalization, exact name matching, reviewed aliases, then
+  RapidFuzz similarity. RapidFuzz scores are similarity values, not probabilities.
+- Accept a fuzzy match only when it clears both a minimum score and a sufficient margin
+  over the second candidate. Tune both settings on development examples.
+- If multiple candidates remain close, return their names and relevant metadata for
+  clarification. Do not let the LLM silently choose.
+
+### Few-Shot Example Library
+
+- Store curated, manually verified question-SQL pairs separately from the held-out
+  evaluation set. Tag examples by tables, joins, filters, aggregates, and known schema
+  pitfalls.
+- In production, retrieve a small number of examples relevant to the current question
+  and insert them into the SQL-generation prompt. Begin with deterministic tag/keyword
+  selection; evaluate embedding-based selection only if it improves held-out accuracy.
+- Run the same retrieval component during offline evaluation. Compare no examples,
+  static examples, and dynamic retrieval as separate A/B experiments.
+- Promote corrected production questions into the library only after human review and
+  SQL verification.
+
+### Optional Optimization and External Benchmarks
+
+- After the LangChain/LangGraph baseline is measured, DSPy may optimize the SQL
+  generator's instructions and few-shot examples against execution accuracy. DSPy is
+  an offline optimizer for that node; it does not replace LangGraph, SQL guardrails, or
+  system-level A/B experiments. Expand and split the dataset before reporting DSPy
+  results so optimization examples remain separate from held-out tests.
+- Public benchmarks such as BIRD, Spider 2.0, and LiveSQLBench may provide an external
+  SEA-LION-vs-GLM comparison. They are optional and do not block the application. The
+  StS2 held-out eval remains the model-selection source of truth for this project.
+
+### Guardrails
+
+1. Dedicated router for stats vs strategy/off-topic questions.
+2. Treat the user's question as input data, not pipeline instructions.
+3. sqlglot parsing, one-statement enforcement, and SELECT-only validation.
+4. Deterministic table allowlist shared by schema rendering and validation.
+5. Read-only SQLite connection, execution timeout, and output row cap.
+6. Maximum three attempts, followed by an explicit failure response.
+
+**Verification (phase):** all guardrail tests pass; baseline and improved eval
+experiments are recorded with execution accuracy broken down by question tags.
 
 ## Phase 4 — Web UI
 
