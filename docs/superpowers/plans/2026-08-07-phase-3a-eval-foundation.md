@@ -89,7 +89,7 @@ def test_rejects_duplicate_ids(tmp_path):
 
 - [ ] **Step 3: Verify the tests fail**
 
-Run: `uv run pytest tests/eval/test_cases.py -q`
+Run: `uv run python -m pytest tests/eval/test_cases.py -q`
 
 Expected: import failure because `eval.cases` does not exist.
 
@@ -168,7 +168,7 @@ def load_cases(path: Path) -> list[EvalCase]:
 
 - [ ] **Step 6: Run tests**
 
-Run: `uv run pytest tests/eval/test_cases.py -q`
+Run: `uv run python -m pytest tests/eval/test_cases.py -q`
 
 Expected: all loader tests pass.
 
@@ -219,7 +219,7 @@ Also test relative-path enforcement, missing files, JSON round-trip, and empty `
 
 - [ ] **Step 2: Verify the tests fail**
 
-Run: `uv run pytest tests/eval/test_manifest.py -q`
+Run: `uv run python -m pytest tests/eval/test_manifest.py -q`
 
 Expected: import failure because `eval.manifest` does not exist.
 
@@ -259,7 +259,7 @@ with sqlite3.connect(uri, uri=True) as connection:
 
 - [ ] **Step 5: Run tests**
 
-Run: `uv run pytest tests/eval/test_manifest.py -q`
+Run: `uv run python -m pytest tests/eval/test_manifest.py -q`
 
 Expected: all manifest tests pass without reading `data/spire.db`.
 
@@ -337,7 +337,7 @@ def test_scalar_accepts_value_within_tolerance():
 
 - [ ] **Step 4: Verify the tests fail**
 
-Run: `uv run pytest tests/eval/test_sqlite_eval.py tests/eval/test_compare.py -q`
+Run: `uv run python -m pytest tests/eval/test_sqlite_eval.py tests/eval/test_compare.py -q`
 
 Expected: missing-module failures.
 
@@ -375,7 +375,7 @@ message is `interrupted`; otherwise use `execution_error`. Read-only mode reject
 
 - [ ] **Step 7: Run tests**
 
-Run: `uv run pytest tests/eval/test_sqlite_eval.py tests/eval/test_compare.py -q`
+Run: `uv run python -m pytest tests/eval/test_sqlite_eval.py tests/eval/test_compare.py -q`
 
 Expected: all executor and comparator tests pass.
 
@@ -438,7 +438,7 @@ Assert these exact formulas:
 
 - [ ] **Step 5: Verify the tests fail**
 
-Run: `uv run pytest tests/eval/test_runner.py -q`
+Run: `uv run python -m pytest tests/eval/test_runner.py -q`
 
 Expected: missing runner and report types.
 
@@ -479,7 +479,7 @@ never serialize unsupported objects with `default=str`.
 
 - [ ] **Step 9: Run tests**
 
-Run: `uv run pytest tests/eval/test_runner.py -q`
+Run: `uv run python -m pytest tests/eval/test_runner.py -q`
 
 Expected: all orchestration, scoring, continuation, metric, and serialization tests pass.
 
@@ -528,7 +528,7 @@ invalid gold SQL. Hide tracebacks unless `--debug` is supplied.
 
 - [ ] **Step 2: Verify the tests fail**
 
-Run: `uv run pytest tests/eval/test_cli.py -q`
+Run: `uv run python -m pytest tests/eval/test_cli.py -q`
 
 Expected: failure because `eval.__main__` does not exist.
 
@@ -671,7 +671,7 @@ decision changed; explain every change in the handoff.
 
 - [ ] **Step 8: Run CLI tests**
 
-Run: `uv run pytest tests/eval/test_cli.py -q`
+Run: `uv run python -m pytest tests/eval/test_cli.py -q`
 
 Expected: all CLI tests pass.
 
@@ -689,7 +689,7 @@ Proposed commit message: `Add initial StS2 evaluation dataset and CLI`
 
 - [ ] **Step 1: Run all tests**
 
-Run: `uv run pytest -q`
+Run: `uv run python -m pytest -q`
 
 Expected: all tests pass.
 
@@ -719,7 +719,7 @@ Expected: checksum and all eight gold SQL cases pass.
 Run:
 
 ```bash
-uv run pytest tests/eval/test_runner.py -q -k "three_trials or report"
+uv run python -m pytest tests/eval/test_runner.py -q -k "three_trials or report"
 ```
 
 Expected: one case produces three independent trial records, three scored outputs, and
