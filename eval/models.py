@@ -58,6 +58,18 @@ class QueryResult:
 
 
 @dataclass(frozen=True)
+class DatasetManifest:
+    dataset_id: str
+    database: str
+    created_at: str
+    earliest_run_date: str
+    latest_run_date: str
+    run_count: int
+    database_sha256: str
+    schema_git_commit: str
+
+
+@dataclass(frozen=True)
 class ResultSummary:
     row_count: int
     sha256: str
