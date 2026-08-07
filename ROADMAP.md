@@ -15,13 +15,14 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
-| 3a Eval dataset + grader | pending | none | ~40 gold questions; compare generated-SQL rows with gold-SQL rows |
+| 3a Eval foundation | in-progress | none | spec approved; build manifest, initial cases, deterministic comparator, reports, and fixture tests |
 | 3b Model + schema context | pending | none | LangChain, OpenAI-compatible model config, expose only approved tables |
 | 3c SQL guardrails | pending | none | sqlglot validation, table allowlist, read-only execution limits |
 | 3d LangGraph pipeline | pending | none | router → generate → validate → execute; retry failures up to 3 times |
-| 3e Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
-| 3f Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
-| 3g Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
+| 3e End-to-end baseline eval | pending | none | connect LangGraph to evaluator; 3 independent trials per case |
+| 3f Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
+| 3g Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
+| 3h Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
 | 4a Chat web UI | pending | none | thin frontend over nlq |
 | 4b Deploy | pending | none | portfolio hosting TBD |
 
@@ -31,7 +32,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 |-------|-------|----------------|
 | 1 Foundation | 1a–1b | — |
 | 2 Ingestion | 2a–2f | 1b schema |
-| 3 Text-to-SQL | 3a–3g | 2d data present |
+| 3 Text-to-SQL | 3a–3h | 2d data present |
 | 4 Web UI | 4a–4b | 3 pipeline works |
 
 ## Phase 1 — Foundation
@@ -76,11 +77,10 @@ Graph flow:
 
 ### Build Order
 
-- **3a Eval dataset + grader**: create roughly 40 questions across real player queries,
-  schema edge cases, router cases, and adversarial inputs. Each stats question stores
-  verified gold SQL. Grade execution accuracy by comparing generated-SQL result rows
-  against gold-SQL result rows on the same database snapshot; do not compare SQL text
-  or natural-language phrasing.
+- **3a Eval foundation**: implement the approved evaluation specification. Freeze and
+  identify the SQLite snapshot, create the initial development cases with verified gold
+  SQL, and build the deterministic comparator, report format, and fixture-based tests.
+  This stage proves scoring without requiring an LLM.
 - **3b Model + schema context**: configure LangChain against an OpenAI-compatible
   endpoint (`base_url` + model name). Render only approved analytical tables into the
   schema context; omit raw_runs, sync_state, and sync_log. Include concise column and
@@ -91,13 +91,16 @@ Graph flow:
 - **3d LangGraph pipeline**: define typed per-question state containing question,
   route, SQL, error, attempt count, rows, and answer. Add nodes for routing, generation,
   validation, execution, and retry control.
-- **3e Answer synthesis**: turn successful result rows into a concise answer and return
+- **3e End-to-end baseline eval**: connect the LangGraph pipeline to the Phase 3a
+  evaluator. Run every case through three independent, cache-disabled trials and report
+  execution accuracy, stability, first-attempt accuracy, and retry recovery.
+- **3f Answer synthesis**: turn successful result rows into a concise answer and return
   the generated SQL for transparency. Core v1 evals grade rows, not prose; answer
   faithfulness judging is optional later work.
-- **3f Langfuse observability**: record one trace per question and spans for graph nodes,
+- **3g Langfuse observability**: record one trace per question and spans for graph nodes,
   including prompts, model outputs, timing, token usage, errors, and execution-accuracy
   scores. Group full eval sweeps as named experiments for before/after comparison.
-- **3g Accuracy experiments**: start with a measurable baseline, then test semantic SQL
+- **3h Accuracy experiments**: start with a measurable baseline, then test semantic SQL
   views, entity linking, and few-shot retrieval separately. Change one variable per
   experiment while holding the model, dataset, and other settings fixed. Keep additions
   that improve held-out results; record each experiment's accuracy change.
