@@ -28,13 +28,14 @@ class AgentPrediction:
 
 
 @dataclass(frozen=True)
-class PredictionOutcome:
-    prediction: AgentPrediction
+class AgentRunResult:
+    route: Route
+    generated_sql: str | None
     attempt_count: int
 
 
 class Predictor(Protocol):
-    def predict(self, question: str) -> PredictionOutcome: ...
+    def predict(self, question: str) -> AgentRunResult: ...
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,54 @@ class ScoredTrial:
     route_correct: bool
     gold_result: ResultSummary | None
     predicted_result: ResultSummary | None
-    passed: bool
-    executable: bool | None
+    trial_passed: bool
+    sql_execution_succeeded: bool | None
     failure_category: str | None
     error: str | None
+
+
+@dataclass(frozen=True)
+class AggregateMetrics:
+    execution_accuracy: float
+    router_accuracy: float
+    executable_sql_rate: float
+    first_attempt_execution_accuracy: float
+    retry_recovery_rate: float | None
+    average_attempt_count: float
+    mean_latency_ms: float
+    p50_latency_ms: float
+    p95_latency_ms: float
+
+
+@dataclass(frozen=True)
+class CaseLevelScore:
+    case_id: str
+    passes: int
+    trials: int
+
+
+@dataclass(frozen=True)
+class TagMetrics:
+    case_count: int
+    trial_count: int
+    pass_rate: float
+
+
+@dataclass(frozen=True)
+class CaseEvaluation:
+    case_id: str
+    tags: tuple[str, ...]
+    case_level_score: CaseLevelScore
+    trials: tuple[ScoredTrial, ...]
+
+
+@dataclass(frozen=True)
+class EvaluationReport:
+    run_id: str
+    created_at: str
+    dataset: DatasetManifest
+    case_set_sha256: str
+    configuration: dict[str, object]
+    aggregate_metrics: AggregateMetrics
+    per_tag_metrics: dict[str, TagMetrics]
+    cases: tuple[CaseEvaluation, ...]

@@ -121,12 +121,13 @@ class AgentPrediction:
     sql: str | None
 
 @dataclass(frozen=True)
-class PredictionOutcome:
-    prediction: AgentPrediction
+class AgentRunResult:
+    route: Route
+    generated_sql: str | None
     attempt_count: int
 
 class Predictor(Protocol):
-    def predict(self, question: str) -> PredictionOutcome: ...
+    def predict(self, question: str) -> AgentRunResult: ...
 
 @dataclass(frozen=True)
 class RuntimeMetadata:
@@ -411,7 +412,7 @@ class SequencePredictor:
 - [ ] **Step 2: Write failing trial tests**
 
 Assert one case calls the predictor three times by default, numbers trials `1..3`,
-attaches the case ID, obtains attempt count from `PredictionOutcome`, measures latency
+attaches the case ID, obtains attempt count from `AgentRunResult`, measures latency
 with an injected clock, preserves identical predictions as separate records, and allows
 `trial_count=1` for fast development.
 
@@ -432,7 +433,7 @@ Assert these exact formulas:
   expected-SQL trials.
 - Retry recovery: passing retried trials divided by retried trials; `null` if none.
 - Average attempt count: arithmetic mean across all trials.
-- Stability: pass count over trial count per case.
+- Case-level score: pass count over trial count per case.
 - Tags: case count, trial count, and pass rate.
 - Latency: mean, p50, and nearest-rank p95.
 
@@ -449,13 +450,16 @@ def collect_trial_records(case, predictor, trial_count=3, clock=time.perf_counte
     records = []
     for trial in range(1, trial_count + 1):
         started = clock()
-        outcome = predictor.predict(case.question)
+        agent_result = predictor.predict(case.question)
         elapsed_ms = (clock() - started) * 1000
         records.append(TrialRecord(
             case_id=case.id,
             trial=trial,
-            prediction=outcome.prediction,
-            runtime=RuntimeMetadata(outcome.attempt_count, elapsed_ms),
+            prediction=AgentPrediction(
+                route=agent_result.route,
+                sql=agent_result.generated_sql,
+            ),
+            runtime=RuntimeMetadata(agent_result.attempt_count, elapsed_ms),
         ))
     return records
 ```
@@ -723,7 +727,7 @@ uv run python -m pytest tests/eval/test_runner.py -q -k "three_trials or report"
 ```
 
 Expected: one case produces three independent trial records, three scored outputs, and
-stability `3/3`; no response or semantic cache is enabled.
+case-level score `3/3`; no response or semantic cache is enabled.
 
 - [ ] **Step 5: Update roadmap status**
 

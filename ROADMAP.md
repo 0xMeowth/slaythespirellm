@@ -93,7 +93,7 @@ Graph flow:
   validation, execution, and retry control.
 - **3e End-to-end baseline eval**: connect the LangGraph pipeline to the Phase 3a
   evaluator. Run every case through three independent, cache-disabled trials and report
-  execution accuracy, stability, first-attempt accuracy, and retry recovery.
+  execution accuracy, case-level score, first-attempt accuracy, and retry recovery.
 - **3f Answer synthesis**: turn successful result rows into a concise answer and return
   the generated SQL for transparency. Core v1 evals grade rows, not prose; answer
   faithfulness judging is optional later work.

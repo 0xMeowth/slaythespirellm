@@ -320,7 +320,7 @@ Required secondary metrics:
 - First-attempt execution accuracy.
 - Retry recovery rate.
 - Average SQL-generation attempts.
-- Per-question stability, reported as `0/3` through `3/3`.
+- Per-case score, reported as `0/3` through `3/3`.
 - Mean and percentile latency.
 - Accuracy grouped by tag.
 - Guardrail rejection rate once guardrails exist.
@@ -392,7 +392,7 @@ Concrete per-case output:
 {
   "case_id": "stored_run_count",
   "tags": ["runs", "count", "single-table"],
-  "stability": {
+  "case_level_score": {
     "passes": 3,
     "trials": 3
   },
@@ -420,7 +420,8 @@ Concrete per-case output:
           "sha256": "<hash of normalized predicted rows>",
           "preview": [[659515]]
         },
-        "passed": true,
+        "trial_passed": true,
+        "sql_execution_succeeded": true,
         "failure_category": null,
         "error": null
       }
@@ -461,7 +462,7 @@ Before Phase 3a is complete:
 - Broken gold SQL is identified as a dataset defect.
 - Three trials produce three independent trial records per case.
 - Response caching is disabled during evaluation.
-- Aggregate, stability, and per-tag metrics are correct on known fixtures.
+- Aggregate, case-level, and per-tag metrics are correct on known fixtures.
 - The JSON report contains dataset, case-set, and pipeline version metadata.
 
 ## Later Integration
