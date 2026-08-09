@@ -493,18 +493,21 @@ Proposed commit message: `Add three-trial evaluation runner and reports`
 
 ---
 
-### Task 5: CLI, Manifest, and Initial Dataset
+### Task 5: CLI, Compact Snapshot, Manifest, and Initial Dataset
 
 **Files:**
 - Create: `eval/__main__.py`
+- Create: `eval/snapshot.py`
 - Create: `tests/eval/test_cli.py`
+- Create: `tests/eval/test_snapshot.py`
 - Create: `eval/datasets/manifest.json`
 - Create: `eval/cases/development.json`
 - Create: `eval/cases/held_out.json`
 - Modify when needed: `docs/specs/phase-3a-evaluation.md`
 
 **Interfaces:**
-- Produces: `manifest create`, `manifest verify`, and `cases validate` CLI commands.
+- Produces: `snapshot create`, `manifest create`, `manifest verify`, and
+  `cases validate` CLI commands.
 
 - [ ] **Step 1: Write failing CLI tests**
 
@@ -592,28 +595,28 @@ Write this JSON array to `eval/cases/development.json`:
     "tags": ["runs", "win-rate", "group-by", "ranking"]
   },
   {
-    "id": "silent_most_common_final_deck_cards",
-    "question": "Which five cards appear in the most Silent final decks?",
+    "id": "silent_gold_axe_final_decks",
+    "question": "How many Silent final decks contain Gold Axe?",
     "expected_route": "sql",
-    "gold_sql": "SELECT c.card_id, c.name, COUNT(DISTINCT rc.run_id) AS deck_count FROM run_cards AS rc JOIN runs AS r ON r.run_id = rc.run_id JOIN cards AS c ON c.card_id = rc.card_id WHERE r.character = 'SILENT' GROUP BY c.card_id, c.name ORDER BY deck_count DESC, c.card_id ASC LIMIT 5",
-    "comparison": {"mode": "ordered_rows", "float_tolerance": 0.0001},
-    "tags": ["runs", "cards", "joins", "distinct", "ranking"]
-  },
-  {
-    "id": "ironclad_winning_run_relics",
-    "question": "Which five relics appear in the most winning Ironclad runs?",
-    "expected_route": "sql",
-    "gold_sql": "SELECT rel.relic_id, rel.name, COUNT(DISTINCT rr.run_id) AS winning_runs FROM run_relics AS rr JOIN runs AS r ON r.run_id = rr.run_id JOIN relics AS rel ON rel.relic_id = rr.relic_id WHERE r.character = 'IRONCLAD' AND r.win = 1 GROUP BY rel.relic_id, rel.name ORDER BY winning_runs DESC, rel.relic_id ASC LIMIT 5",
-    "comparison": {"mode": "ordered_rows", "float_tolerance": 0.0001},
-    "tags": ["runs", "relics", "joins", "distinct", "ranking"]
-  },
-  {
-    "id": "gold_axe_offer_pick_rate",
-    "question": "When Gold Axe was offered, what fraction of the time was it picked?",
-    "expected_route": "sql",
-    "gold_sql": "SELECT AVG(CAST(was_picked AS REAL)) FROM run_card_choices WHERE card_id = 'GOLD_AXE'",
+    "gold_sql": "SELECT COUNT(DISTINCT rc.run_id) FROM run_cards AS rc JOIN runs AS r ON r.run_id = rc.run_id WHERE rc.card_id = 'GOLD_AXE' AND r.character = 'SILENT'",
     "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
-    "tags": ["card-choices", "entity", "pick-rate", "aggregation"]
+    "tags": ["runs", "cards", "joins", "distinct", "entity"]
+  },
+  {
+    "id": "ironclad_winning_fishing_rod_runs",
+    "question": "How many winning Ironclad runs contain Fishing Rod?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(DISTINCT rr.run_id) FROM run_relics AS rr JOIN runs AS r ON r.run_id = rr.run_id WHERE rr.relic_id = 'FISHING_ROD' AND r.character = 'IRONCLAD' AND r.win = 1",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["runs", "relics", "joins", "distinct", "entity", "filter"]
+  },
+  {
+    "id": "gold_axe_offer_count",
+    "question": "How many times was Gold Axe offered?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(*) FROM run_card_choices WHERE card_id = 'GOLD_AXE'",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["card-choices", "entity", "count", "filter"]
   },
   {
     "id": "silent_strategy_advice",
@@ -633,13 +636,17 @@ Write this JSON array to `eval/cases/development.json`:
 Write `[]` plus a trailing newline to `eval/cases/held_out.json`. Create the 24/16 split
 only after expansion to forty cases.
 
-- [ ] **Step 5: Generate the frozen manifest**
+- [ ] **Step 5: Create the compact snapshot and frozen manifest**
 
 Run:
 
 ```bash
+uv run python -m eval snapshot create \
+  --source data/spire.db \
+  --output data/spire_eval_2026-07-29.db
+
 uv run python -m eval manifest create \
-  --database data/spire.db \
+  --database data/spire_eval_2026-07-29.db \
   --dataset-id sts2-2026-07-29 \
   --schema-git-commit "$(git log -1 --format=%H -- schema.sql)" \
   --output eval/datasets/manifest.json

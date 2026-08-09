@@ -1,0 +1,78 @@
+[
+  {
+    "id": "stored_run_count",
+    "question": "How many runs are stored?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(*) FROM runs",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["runs", "count", "single-table"]
+  },
+  {
+    "id": "non_abandoned_run_count",
+    "question": "How many stored runs were not abandoned?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(*) FROM runs WHERE was_abandoned = 0",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["runs", "count", "filter"]
+  },
+  {
+    "id": "official_character_run_counts",
+    "question": "How many runs are recorded for each official character?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT character, COUNT(*) AS run_count FROM runs WHERE character IN ('IRONCLAD', 'SILENT', 'DEFECT', 'NECROBINDER', 'REGENT') GROUP BY character",
+    "comparison": {"mode": "unordered_rows", "float_tolerance": 0.0001},
+    "tags": ["runs", "group-by", "filter"]
+  },
+  {
+    "id": "silent_ascension_10_win_rate",
+    "question": "What is Silent's win rate at Ascension 10, excluding abandoned runs?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT AVG(CAST(win AS REAL)) FROM runs WHERE character = 'SILENT' AND ascension = 10 AND was_abandoned = 0",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["runs", "win-rate", "aggregation", "filter"]
+  },
+  {
+    "id": "official_character_win_rate_ranking",
+    "question": "Rank the five official characters by non-abandoned win rate.",
+    "expected_route": "sql",
+    "gold_sql": "SELECT character, AVG(CAST(win AS REAL)) AS win_rate FROM runs WHERE was_abandoned = 0 AND character IN ('IRONCLAD', 'SILENT', 'DEFECT', 'NECROBINDER', 'REGENT') GROUP BY character ORDER BY win_rate DESC, character ASC",
+    "comparison": {"mode": "ordered_rows", "float_tolerance": 0.0001},
+    "tags": ["runs", "win-rate", "group-by", "ranking"]
+  },
+  {
+    "id": "silent_gold_axe_final_decks",
+    "question": "How many Silent final decks contain Gold Axe?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(DISTINCT rc.run_id) FROM run_cards AS rc JOIN runs AS r ON r.run_id = rc.run_id WHERE rc.card_id = 'GOLD_AXE' AND r.character = 'SILENT'",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["runs", "cards", "joins", "distinct", "entity"]
+  },
+  {
+    "id": "ironclad_winning_fishing_rod_runs",
+    "question": "How many winning Ironclad runs contain Fishing Rod?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(DISTINCT rr.run_id) FROM run_relics AS rr JOIN runs AS r ON r.run_id = rr.run_id WHERE rr.relic_id = 'FISHING_ROD' AND r.character = 'IRONCLAD' AND r.win = 1",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["runs", "relics", "joins", "distinct", "entity", "filter"]
+  },
+  {
+    "id": "gold_axe_offer_count",
+    "question": "How many times was Gold Axe offered?",
+    "expected_route": "sql",
+    "gold_sql": "SELECT COUNT(*) FROM run_card_choices WHERE card_id = 'GOLD_AXE'",
+    "comparison": {"mode": "scalar", "float_tolerance": 0.0001},
+    "tags": ["card-choices", "entity", "count", "filter"]
+  },
+  {
+    "id": "silent_strategy_advice",
+    "question": "How should I play the Silent?",
+    "expected_route": "decline",
+    "tags": ["router", "strategy"]
+  },
+  {
+    "id": "ambiguous_strike_win_rate",
+    "question": "What is Strike's win rate?",
+    "expected_route": "clarify",
+    "tags": ["router", "ambiguity", "entity"]
+  }
+]

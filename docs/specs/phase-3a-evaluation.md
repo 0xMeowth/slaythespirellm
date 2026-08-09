@@ -59,16 +59,18 @@ flow. The dataset then expands toward roughly 40 cases before final model compar
 
 ## Frozen Database Manifest
 
-The current SQLite database becomes the initial frozen evaluation snapshot. Ingestion
-must not modify this file while it is used for formal evaluation. Future ingestion
-uses a separate live database.
+The initial frozen evaluation snapshot is a compact copy of the ingestion database.
+It contains only `runs`, `run_cards`, `run_relics`, `run_card_choices`, `cards`, and
+`relics`, preserving their indexes. It excludes `raw_runs`, `sync_state`, and
+`sync_log`. Ingestion must never modify the frozen file; future syncs continue against
+the separate live database.
 
 `eval/datasets/manifest.json` records:
 
 ```json
 {
   "dataset_id": "sts2-2026-07-29",
-  "database": "data/spire.db",
+  "database": "data/spire_eval_2026-07-29.db",
   "created_at": "<ISO-8601 timestamp>",
   "earliest_run_date": "2026-06-01",
   "latest_run_date": "2026-07-29",
