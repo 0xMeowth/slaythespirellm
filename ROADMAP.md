@@ -15,7 +15,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
-| 3a Eval foundation | in-progress | none | spec approved; build manifest, initial cases, deterministic comparator, reports, and fixture tests |
+| 3a Eval foundation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | pending | none | LangChain, OpenAI-compatible model config, expose only approved tables |
 | 3c SQL guardrails | pending | none | sqlglot validation, table allowlist, read-only execution limits |
 | 3d LangGraph pipeline | pending | none | router → generate → validate → execute; retry failures up to 3 times |
