@@ -1,0 +1,288 @@
+{
+  "runs": {
+    "description": "One row per submitted Slay the Spire 2 run. Aggregate this table to count runs, wins, abandons, characters, game modes, and run-level outcomes.",
+    "columns": {
+      "run_id": {
+        "description": "Stable local primary key: the SHA-256 hash of the raw exported run line. Join child run tables to this column."
+      },
+      "character": {
+        "description": "Bare character ID from the first player in the run. It contains official and many modded IDs, so treat it as an open set rather than a fixed enum.",
+        "examples": ["IRONCLAD", "SILENT", "DEFECT", "AUTOMATON-AUTOMATON"]
+      },
+      "win": {
+        "description": "Whether the run was won.",
+        "values": {
+          "0": "loss",
+          "1": "victory"
+        }
+      },
+      "was_abandoned": {
+        "description": "Whether the player abandoned the run. A death is win = 0 and was_abandoned = 0.",
+        "values": {
+          "0": "completed or died without abandoning",
+          "1": "abandoned"
+        }
+      },
+      "ascension": {
+        "description": "Ascension difficulty selected for the run.",
+        "range": {
+          "minimum": 0,
+          "maximum": 10
+        }
+      },
+      "game_mode": {
+        "description": "Run mode selected by the player.",
+        "values": {
+          "standard": "normal run",
+          "custom": "customized run",
+          "daily": "daily challenge"
+        }
+      },
+      "seed": {
+        "description": "Game seed used to generate the run. It is an opaque text identifier and may be absent."
+      },
+      "build_id": {
+        "description": "Game build/version that produced the run, such as v0.109.1."
+      },
+      "run_time": {
+        "description": "Recorded run duration in seconds. It may be absent."
+      },
+      "start_time": {
+        "description": "Player-local Unix epoch timestamp for when the run started. It may be absent.",
+        "examples": [1704067200]
+      },
+      "submitted_at": {
+        "description": "Approximate ISO-8601 timestamp when the run was submitted, derived from the export cursor. It may be absent.",
+        "examples": ["2026-07-30T12:34:56+00:00"]
+      },
+      "floors_reached": {
+        "description": "Count of map points visited during the run. It may be absent."
+      },
+      "acts": {
+        "description": "Comma-separated act IDs visited during the run. It may be absent."
+      },
+      "killed_by_encounter": {
+        "description": "Bare encounter ID that killed the player, or NULL when no encounter caused the loss."
+      },
+      "killed_by_event": {
+        "description": "Event ID that killed the player, or NULL when no event caused the loss."
+      },
+      "platform_type": {
+        "description": "Platform recorded for the run.",
+        "values": {
+          "steam": "Steam client",
+          "none": "no platform recorded"
+        }
+      },
+      "schema_version": {
+        "description": "Version of the submitted run JSON schema. Observed exports use versions 6 through 11.",
+        "range": {
+          "minimum": 6,
+          "maximum": 11
+        }
+      },
+      "is_beta": {
+        "description": "Whether the run used a beta build.",
+        "values": {
+          "0": "non-beta build",
+          "1": "beta build"
+        }
+      }
+    },
+    "joins": []
+  },
+  "run_cards": {
+    "description": "One row per physical card copy in a run's final deck. A card can appear multiple times in the same run.",
+    "columns": {
+      "run_id": {
+        "description": "Run that owns this final-deck card copy."
+      },
+      "card_id": {
+        "description": "Bare card reference ID for this copy."
+      },
+      "upgrade_level": {
+        "description": "Number of upgrades applied to this physical card copy; zero means unupgraded."
+      },
+      "floor_added": {
+        "description": "Floor on which this copy was added to the deck, or NULL when the source did not record it."
+      }
+    },
+    "joins": [
+      {
+        "table": "runs",
+        "on": "run_cards.run_id = runs.run_id",
+        "description": "Connect each final-deck card copy to its run."
+      },
+      {
+        "table": "cards",
+        "on": "run_cards.card_id = cards.card_id",
+        "description": "Connect each final-deck card copy to card reference metadata."
+      }
+    ]
+  },
+  "run_relics": {
+    "description": "One row per relic acquired during a run.",
+    "columns": {
+      "run_id": {
+        "description": "Run that acquired this relic."
+      },
+      "relic_id": {
+        "description": "Bare relic reference ID for the acquired relic."
+      },
+      "floor_added": {
+        "description": "Floor on which the relic was acquired, or NULL when the source did not record it."
+      }
+    },
+    "joins": [
+      {
+        "table": "runs",
+        "on": "run_relics.run_id = runs.run_id",
+        "description": "Connect each acquired relic to its run."
+      },
+      {
+        "table": "relics",
+        "on": "run_relics.relic_id = relics.relic_id",
+        "description": "Connect each acquired relic to relic reference metadata."
+      }
+    ]
+  },
+  "run_card_choices": {
+    "description": "One row per card offered to a player. Use this table to compare offered cards with cards that were picked.",
+    "columns": {
+      "run_id": {
+        "description": "Run in which the card offer appeared."
+      },
+      "act": {
+        "description": "One-based act number containing the card offer."
+      },
+      "floor_index": {
+        "description": "One-based floor number within the act containing the card offer."
+      },
+      "card_id": {
+        "description": "Bare card reference ID for one offered card candidate."
+      },
+      "was_picked": {
+        "description": "Whether this offered card candidate was selected.",
+        "values": {
+          "0": "offered but not picked",
+          "1": "picked"
+        }
+      }
+    },
+    "joins": [
+      {
+        "table": "runs",
+        "on": "run_card_choices.run_id = runs.run_id",
+        "description": "Connect each card offer to its run."
+      },
+      {
+        "table": "cards",
+        "on": "run_card_choices.card_id = cards.card_id",
+        "description": "Connect each offered card candidate to card reference metadata."
+      }
+    ]
+  },
+  "cards": {
+    "description": "One row per card reference entity from the game export. Join to final-deck cards and offered-card choices for card-level analysis.",
+    "columns": {
+      "card_id": {
+        "description": "Bare card reference ID, such as STRIKE_SILENT."
+      },
+      "name": {
+        "description": "Display name of the card."
+      },
+      "description": {
+        "description": "Card rules text with source markup removed; it may be NULL."
+      },
+      "cost": {
+        "description": "Printed energy cost, or NULL for X-cost cards and some statuses."
+      },
+      "is_x_cost": {
+        "description": "Whether the card has a variable X energy cost.",
+        "values": {
+          "0": "fixed or non-X cost",
+          "1": "variable X cost"
+        }
+      },
+      "type": {
+        "description": "Gameplay type of the card.",
+        "values": {
+          "Power": "persistent effect card",
+          "Skill": "skill card",
+          "Attack": "attack card",
+          "Curse": "curse card",
+          "Status": "status card",
+          "Quest": "quest card"
+        }
+      },
+      "rarity": {
+        "description": "Rarity or special acquisition category of the card.",
+        "values": {
+          "Rare": "rare card",
+          "Uncommon": "uncommon card",
+          "Common": "common card",
+          "Ancient": "ancient card",
+          "Curse": "curse",
+          "Basic": "starter/basic card",
+          "Status": "status",
+          "Event": "event card",
+          "Quest": "quest card",
+          "Token": "token card"
+        }
+      },
+      "color": {
+        "description": "Character or special card pool. Modded characters add additional color values.",
+        "examples": ["ironclad", "silent", "defect", "colorless", "necrobinder"]
+      },
+      "target": {
+        "description": "Targeting rule used by the card.",
+        "values": {
+          "Self": "the player",
+          "AnyEnemy": "one chosen enemy",
+          "None": "no target",
+          "AllEnemies": "every enemy",
+          "RandomEnemy": "one random enemy",
+          "AnyAlly": "one chosen ally",
+          "AllAllies": "every ally"
+        }
+      },
+      "keywords": {
+        "description": "Comma-separated card keywords, or NULL when the card has none. Split on commas before matching individual keywords.",
+        "examples": ["Ethereal,Exhaust"]
+      }
+    },
+    "joins": []
+  },
+  "relics": {
+    "description": "One row per relic reference entity from the game export. Join to acquired relics for relic-level analysis.",
+    "columns": {
+      "relic_id": {
+        "description": "Bare relic reference ID."
+      },
+      "name": {
+        "description": "Display name of the relic."
+      },
+      "description": {
+        "description": "Relic rules text with source markup removed; it may be NULL."
+      },
+      "rarity": {
+        "description": "Relic rarity or acquisition category.",
+        "values": {
+          "Common Relic": "common relic",
+          "Uncommon Relic": "uncommon relic",
+          "Rare Relic": "rare relic",
+          "Ancient Relic": "ancient relic",
+          "Event Relic": "event reward relic",
+          "Shop Relic": "shop relic",
+          "Starter Relic": "starting relic",
+          "Relic": "general relic category"
+        }
+      },
+      "pool": {
+        "description": "Relic pool used for acquisition. Pools include shared and character-specific pools, including modded character pools.",
+        "examples": ["shared", "ironclad", "silent", "defect", "necrobinder"]
+      }
+    },
+    "joins": []
+  }
+}
