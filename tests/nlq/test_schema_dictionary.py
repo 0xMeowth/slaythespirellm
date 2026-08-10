@@ -68,7 +68,7 @@ def test_loads_typed_dictionary(dictionary_path: Path):
 def test_rejects_non_object_root(tmp_path: Path, root: object):
     path = write_dictionary(tmp_path, root=root)
 
-    with pytest.raises(ValueError, match="root must be an object"):
+    with pytest.raises(ValueError, match="schema dictionary root must be a JSON object"):
         load_schema_dictionary(path)
 
 
