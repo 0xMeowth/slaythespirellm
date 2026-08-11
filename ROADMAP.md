@@ -16,7 +16,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
 | 3a Eval foundation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
-| 3b Model + schema context | done | none | 197 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
+| 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
 | 3c SQL guardrails | pending | none | sqlglot validation, table allowlist, read-only execution limits |
 | 3d LangGraph pipeline | pending | none | router → generate → validate → execute; retry failures up to 3 times |
 | 3e End-to-end baseline eval | pending | none | connect LangGraph to evaluator; 3 independent trials per case |
@@ -84,7 +84,7 @@ Graph flow:
 - **3b Model + schema context**: configure LangChain against an OpenAI-compatible
   endpoint (`base_url` + model name). Render only approved analytical tables into the
   schema context; omit raw_runs, sync_state, and sync_log. Include concise column and
-  domain descriptions plus a small number of sample rows.
+  domain descriptions plus reviewed targeted values.
 - **3c SQL guardrails**: use sqlglot to require one parseable SELECT statement and
   enforce a table allowlist. Execute only through SQLite's read-only connection with
   a query timeout and result-row cap.
@@ -175,7 +175,12 @@ experiments are recorded with execution accuracy broken down by question tags.
 ## Phase 4 — Web UI
 
 - **4a Chat web UI**: thin frontend over nlq pipeline.
-- **4b Deploy**: hosting TBD.
+- **4b Deploy**: host the backend in a restricted container running as a non-root
+  user. Mount application code and the analytical database read-only; expose no
+  Docker socket or unrelated host directories; provide only a small temporary
+  filesystem; restrict outbound network access to required model-provider endpoints;
+  apply CPU, memory, request-size, query-time, and rate limits; store secrets outside
+  the image; and place the service behind an authenticated reverse proxy or tunnel.
 
 ## Architectural Notes
 
