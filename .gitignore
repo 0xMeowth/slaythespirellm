@@ -2,5 +2,5 @@
 .worktrees/
 __pycache__/
 *.pyc
-data/
+/data
 .env
