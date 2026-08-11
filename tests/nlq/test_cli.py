@@ -3,13 +3,14 @@ import os
 import sqlite3
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage
 
 from eval.manifest import create_manifest, write_manifest
-from nlq.__main__ import main
+from nlq.__main__ import _reraise_without_api_key, main
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -238,6 +239,24 @@ def test_model_check_debug_reraises_provider_errors(valid_environment):
             environment=valid_environment,
             model_builder=FakeModelBuilder(model),
         )
+
+
+def test_debug_traceback_redacts_api_key_from_chained_cause():
+    api_key = "secret-key"
+    try:
+        try:
+            raise ValueError(f"provider details: {api_key}")
+        except ValueError as cause:
+            raise RuntimeError("safe outer message") from cause
+    except RuntimeError as error:
+        with pytest.raises(RuntimeError, match="safe outer message") as raised:
+            _reraise_without_api_key(error, api_key)
+
+    formatted = "".join(traceback.format_exception(raised.value))
+
+    assert api_key not in formatted
+    assert "safe outer message" in formatted
+    assert "Traceback" in formatted
 
 
 def run_nlq_cli(working_directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:

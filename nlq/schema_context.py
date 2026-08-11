@@ -63,6 +63,7 @@ class SchemaContext:
 
 @dataclass(frozen=True)
 class SchemaContextCacheKey:
+    dataset_id: str
     database_sha256: str
     schema_git_commit: str
     dictionary_sha256: str
@@ -77,6 +78,7 @@ class SchemaContextCache:
     def get_or_build(
         self,
         *,
+        dataset_id: str,
         database_sha256: str,
         schema_git_commit: str,
         dictionary_sha256: str,
@@ -84,6 +86,7 @@ class SchemaContextCache:
         builder: Callable[[], SchemaContext],
     ) -> SchemaContext:
         key = SchemaContextCacheKey(
+            dataset_id=dataset_id,
             database_sha256=database_sha256,
             schema_git_commit=schema_git_commit,
             dictionary_sha256=dictionary_sha256,
@@ -220,6 +223,7 @@ def build_verified_schema_context(
         return render_schema_context(schema, dictionary, manifest)
 
     return context_cache.get_or_build(
+        dataset_id=manifest.dataset_id,
         database_sha256=manifest.database_sha256,
         schema_git_commit=manifest.schema_git_commit,
         dictionary_sha256=dictionary.sha256,
@@ -234,10 +238,13 @@ def _validate_exact_names(
     missing = expected - actual
     unknown = actual - expected
     prefix = f"{table_name} " if table_name is not None else ""
+    errors = []
     if missing:
-        raise ValueError(f"{prefix}missing {subject}: {', '.join(sorted(missing))}")
+        errors.append(f"{prefix}missing {subject}: {', '.join(sorted(missing))}")
     if unknown:
-        raise ValueError(f"{prefix}unknown {subject}: {', '.join(sorted(unknown))}")
+        errors.append(f"{prefix}unknown {subject}: {', '.join(sorted(unknown))}")
+    if errors:
+        raise ValueError("; ".join(errors))
 
 
 def _validate_schema_table_sequence(schema: DatabaseSchema) -> None:

@@ -142,6 +142,14 @@ def test_rejects_non_finite_temperature(valid_environment, value):
         ModelSettings.from_environment(valid_environment)
 
 
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_rejects_non_finite_timeout(valid_environment, value):
+    valid_environment["STS2_LLM_TIMEOUT_SECONDS"] = value
+
+    with pytest.raises(ValueError, match="STS2_LLM_TIMEOUT_SECONDS must be finite"):
+        ModelSettings.from_environment(valid_environment)
+
+
 @pytest.mark.parametrize(
     ("variable", "value", "message"),
     [

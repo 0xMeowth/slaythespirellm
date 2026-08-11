@@ -316,6 +316,7 @@ question.
 The in-memory cache key contains:
 
 ```text
+dataset_id
 database_sha256
 schema_git_commit
 dictionary_sha256

@@ -57,6 +57,8 @@ class ModelSettings:
             raise ValueError("STS2_LLM_MAX_TOKENS must be positive")
 
         timeout_seconds = _float_value(values, "STS2_LLM_TIMEOUT_SECONDS", 60)
+        if not math.isfinite(timeout_seconds):
+            raise ValueError("STS2_LLM_TIMEOUT_SECONDS must be finite")
         if timeout_seconds <= 0:
             raise ValueError("STS2_LLM_TIMEOUT_SECONDS must be positive")
 

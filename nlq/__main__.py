@@ -113,10 +113,10 @@ def _redact_api_key(message: str, api_key: str | None) -> str:
 
 
 def _reraise_without_api_key(error: Exception, api_key: str | None) -> None:
-    message = _redact_api_key(str(error), api_key)
-    if message == str(error):
+    if api_key is None:
         raise error
-    raise RuntimeError(message) from None
+    message = _redact_api_key(str(error), api_key)
+    raise RuntimeError(message).with_traceback(error.__traceback__) from None
 
 
 if __name__ == "__main__":

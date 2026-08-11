@@ -15,6 +15,7 @@ from nlq.schema_context import (
 @pytest.fixture
 def cache_inputs():
     return {
+        "dataset_id": "dataset",
         "database_sha256": "database-sha",
         "schema_git_commit": "commit-a",
         "dictionary_sha256": "dictionary-sha",
@@ -41,6 +42,7 @@ def test_cache_reuses_identical_context(cache_inputs):
 @pytest.mark.parametrize(
     ("changed_field", "value"),
     [
+        ("dataset_id", "dataset-2"),
         ("database_sha256", "database-sha-2"),
         ("schema_git_commit", "commit-b"),
         ("dictionary_sha256", "dictionary-sha-2"),
@@ -104,6 +106,66 @@ def test_build_verifies_manifest_and_caches_full_build(
 
     assert first is second
     assert calls == 1
+
+
+def test_build_does_not_share_contexts_between_datasets(
+    analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
+):
+    database = tmp_path / "snapshot.db"
+    database.write_bytes(analytical_database.read_bytes())
+    first_manifest = create_manifest(
+        dataset_id="first-dataset",
+        database=database,
+        manifest_database_path="snapshot.db",
+        schema_git_commit="abc123",
+        run_count=1,
+        earliest_run_date="2026-07-01",
+        latest_run_date="2026-08-01",
+        created_at="2026-08-10T00:00:00+00:00",
+    )
+    second_manifest = create_manifest(
+        dataset_id="second-dataset",
+        database=database,
+        manifest_database_path="snapshot.db",
+        schema_git_commit="abc123",
+        run_count=1,
+        earliest_run_date="2026-07-01",
+        latest_run_date="2026-08-01",
+        created_at="2026-08-10T00:00:00+00:00",
+    )
+    first_manifest_path = tmp_path / "first-manifest.json"
+    second_manifest_path = tmp_path / "second-manifest.json"
+    write_manifest(first_manifest, first_manifest_path)
+    write_manifest(second_manifest, second_manifest_path)
+    cache = SchemaContextCache()
+    calls = 0
+
+    from nlq import schema_context
+
+    real_inspect = schema_context.inspect_approved_schema
+
+    def counting_inspect(path: Path):
+        nonlocal calls
+        calls += 1
+        return real_inspect(path)
+
+    monkeypatch.setattr(schema_context, "inspect_approved_schema", counting_inspect)
+    dictionary_path = project_root / "nlq" / "schema_dictionary.json"
+
+    first = build_verified_schema_context(
+        first_manifest_path, dictionary_path, project_root=tmp_path, cache=cache
+    )
+    second = build_verified_schema_context(
+        second_manifest_path, dictionary_path, project_root=tmp_path, cache=cache
+    )
+
+    assert first is not second
+    assert first.dataset_id == "first-dataset"
+    assert second.dataset_id == "second-dataset"
+    assert first.database_sha256 == second.database_sha256
+    assert first.schema_git_commit == second.schema_git_commit
+    assert first.dictionary_sha256 == second.dictionary_sha256
+    assert calls == 2
 
 
 def _context() -> SchemaContext:

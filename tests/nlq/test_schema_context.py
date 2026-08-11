@@ -148,6 +148,34 @@ def test_rejects_unknown_dictionary_column(schema: DatabaseSchema, dictionary: S
         validate_dictionary(schema, dictionary_with_unknown_column)
 
 
+def test_reports_missing_and_unknown_dictionary_columns_together(
+    schema: DatabaseSchema, dictionary: SchemaDictionary
+):
+    runs = dictionary.tables["runs"]
+    tables = dict(dictionary.tables)
+    tables["runs"] = replace(
+        runs,
+        columns=MappingProxyType(
+            {
+                name: column
+                for name, column in runs.columns.items()
+                if name != "win"
+            }
+            | {"unknown": ColumnDescription("Unknown column.")}
+        ),
+    )
+    invalid_dictionary = SchemaDictionary(
+        tables=MappingProxyType(tables), sha256=dictionary.sha256
+    )
+
+    with pytest.raises(ValueError) as raised:
+        validate_dictionary(schema, invalid_dictionary)
+
+    assert str(raised.value) == (
+        "runs missing dictionary columns: win; runs unknown dictionary columns: unknown"
+    )
+
+
 def test_loader_rejects_blank_description(project_root: Path, tmp_path: Path):
     dictionary_path = tmp_path / "blank-description.json"
     dictionary_path.write_text(
