@@ -82,10 +82,13 @@ START
   |
   v
 route_question
-  |-- decline ------------------------------> END
+  |-- decline or router error --------------> END
   |
   v
 generate_sql
+  |-- malformed output --> retry_or_finish -- retry --> generate_sql
+  |                              |
+  |                              `-- exhausted --> END
   |
   v
 validate_sql
@@ -176,6 +179,11 @@ The model must return one SQLite query as plain text. One surrounding `sql` Mark
 code fence is accepted because instruction-tuned models commonly add it. Additional
 prose, multiple code blocks, or empty content is rejected as `model_output_error` and
 sent through the same retry path.
+
+If a generation request still fails after LangChain's configured transport retries,
+set terminal `model_request_error` and end. A second LangGraph retry layer for transport
+failures would duplicate `STS2_LLM_MAX_RETRIES`; the three-attempt graph loop is reserved
+for correcting model-produced SQL.
 
 The prompt tells the model to:
 
@@ -301,7 +309,7 @@ ROADMAP.md
 `text_to_sql_model_output.py` owns the router and SQL response parsers.
 `text_to_sql_graph.py` owns prompts, nodes, edges, graph construction, and the public
 invocation wrapper. `studio_graph.py` loads the existing environment-backed model,
-verified schema context, and frozen database, then exports the compiled graph expected
+verified schema context, and frozen database through a no-argument graph factory used
 by the local Agent Server.
 
 ## LangGraph Studio Walkthrough
@@ -316,7 +324,7 @@ Add `langgraph-cli[inmem]` to the development dependency group and a root
   "$schema": "https://langgra.ph/schema.json",
   "dependencies": ["."],
   "graphs": {
-    "sts2_text_to_sql": "./nlq/studio_graph.py:graph"
+    "sts2_text_to_sql": "./nlq/studio_graph.py:create_studio_graph"
   },
   "env": ".env"
 }
@@ -355,7 +363,9 @@ Use fake chat models with scripted responses to cover:
 - Attempt counting independent from model transport retries.
 - Phase 3b schema context included in generation prompts.
 - Phase 3c safe error feedback included only on correction attempts.
-- API keys, raw exceptions, gold SQL, and hidden tables absent from prompts and state.
+- API keys, raw exceptions, gold SQL, and hidden-table schema descriptions absent from
+  prompts and state. A model-produced hidden-table name may reappear only inside the
+  rejected SQL and its safe correction feedback.
 - Compiled graph contains the expected named nodes and conditional paths.
 
 Graph tests use temporary SQLite databases with the six analytical tables. Existing
