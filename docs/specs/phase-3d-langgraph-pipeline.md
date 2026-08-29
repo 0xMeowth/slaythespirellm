@@ -3,12 +3,13 @@
 ## Goal
 
 Build the first real text-to-SQL pipeline as an explicit LangGraph `StateGraph`.
-The graph routes a question, asks SEA-LION to generate SQL, validates and executes the
+The graph routes a question, asks the configured model to generate SQL, validates and executes the
 SQL through Phase 3c, and retries generation with safe error feedback when needed.
 
 Phase 3d must also provide one required LangGraph Studio walkthrough so the graph,
 chosen path, intermediate state, generated SQL, errors, retries, and result rows can be
-inspected visually with the real SEA-LION model.
+inspected visually with the configured real model. SEA-LION is the initial baseline,
+but the graph and model-output contract remain provider-agnostic.
 
 ## Scope
 
@@ -22,7 +23,7 @@ Phase 3d includes:
 - Safe correction feedback and no more than three SQL-generation attempts.
 - A small public result object for later Phase 3e evaluation integration.
 - Deterministic automated tests using fake chat models.
-- A manual LangGraph Studio walkthrough using the real SEA-LION model.
+- A manual LangGraph Studio walkthrough using the configured real model.
 
 Phase 3d excludes:
 
@@ -105,7 +106,117 @@ END
 ```
 
 The graph contains no generic tool-calling loop. LangGraph decides which Python node
-runs; SEA-LION only returns a route decision or SQL text.
+runs; the model only returns a route decision or SQL text.
+
+## Learning View: Inputs and Outputs
+
+`text_to_sql_model_output.py` is used inside both model-calling nodes:
+
+```text
+route_question
+    -> invoke the model
+    -> parse_route_response(raw model text)
+    -> store route and route_reason in graph state
+
+generate_sql
+    -> invoke the model
+    -> parse_generated_sql(raw model text)
+    -> store generated_sql in graph state
+```
+
+The full data flow is:
+
+````text
+INPUT
+  {"question": "How many completed runs are stored?"}
+  |
+  v
+route_question
+  reads: question
+  raw model output:
+    {"route":"sql","reason":"answerable from stored run data"}
+  parser output:
+    RouteDecision(route="sql", reason="answerable from stored run data")
+  writes:
+    route="sql"
+    route_reason="answerable from stored run data"
+  |
+  v
+generate_sql
+  reads: question, verified schema context, previous safe error on retries
+  raw model output:
+    ```sql
+    SELECT COUNT(*) FROM runs WHERE was_abandoned = 0
+    ```
+  parser output:
+    "SELECT COUNT(*) FROM runs WHERE was_abandoned = 0"
+  writes:
+    generated_sql="SELECT COUNT(*) FROM runs WHERE was_abandoned = 0"
+    attempt_count=1
+  |
+  v
+validate_sql
+  reads: generated_sql
+  successful output:
+    ValidatedSql(sql=..., tables=("runs",), functions=("COUNT",))
+  writes on success:
+    error_category=None
+    error_message=None
+  writes on failure, for example:
+    error_category="unapproved_table"
+    error_message="unapproved table: raw_runs"
+  |
+  | failure -> retry_or_finish -> generate_sql
+  v
+execute_sql
+  reads: generated_sql
+  successful output:
+    columns=("COUNT(*)",)
+    rows=((640000,),)
+    truncated=False
+  writes:
+    columns=["COUNT(*)"]
+    rows=[[640000]]
+    result_truncated=False
+    status="succeeded"
+  |
+  v
+OUTPUT
+  TextToSqlRunResult(
+      route="sql",
+      generated_sql="SELECT COUNT(*) FROM runs WHERE was_abandoned = 0",
+      attempt_count=1,
+      columns=("COUNT(*)",),
+      rows=((640000,),),
+      status="succeeded",
+  )
+````
+
+The example count illustrates the shape only. Automated tests use small temporary
+databases, and the real result depends on the selected frozen or live database.
+
+For a declined question, the short path is:
+
+```text
+INPUT
+  {"question": "How should I build Silent?"}
+  |
+  v
+route_question
+  raw model output:
+    {"route":"decline","reason":"strategy advice is outside database scope"}
+  parser output:
+    RouteDecision(route="decline", reason="strategy advice is outside database scope")
+  writes:
+    route="decline"
+    route_reason="strategy advice is outside database scope"
+    status="declined"
+  |
+  v
+END
+
+No SQL is generated, validated, or executed.
+```
 
 ## State
 
@@ -141,7 +252,7 @@ caller. It sets `attempt_count=0`, empty result lists, and `status="running"`.
 
 ### `route_question`
 
-Send the user question to SEA-LION with a short routing system prompt. The router
+Send the user question to the configured model with a short routing system prompt. The router
 returns strict JSON in one of these forms:
 
 ```json
@@ -168,7 +279,7 @@ three SQL-generation attempts.
 
 ### `generate_sql`
 
-Increment `attempt_count`, then call SEA-LION with:
+Increment `attempt_count`, then call the configured model with:
 
 - A system prompt defining the text-to-SQL task and output rules.
 - The verified, cached Phase 3b schema context.
@@ -231,8 +342,8 @@ transport retries controlled by `STS2_LLM_MAX_RETRIES` do not increment
 
 ## Model Output Handling
 
-Do not depend on autonomous tool calling. SEA-LION's hosted models and versions differ
-in how they represent tool calls, while this graph needs only two narrow outputs.
+Do not depend on autonomous tool calling. Providers and model versions differ in how
+they represent tool calls, while this graph needs only two narrow outputs.
 
 Use ordinary chat-model responses and deterministic Python parsers:
 
@@ -333,7 +444,7 @@ Add `langgraph-cli[inmem]` to the development dependency group and a root
 The manual walkthrough is one explicit verification step:
 
 1. Set `LANGSMITH_TRACING=false` and `LANGGRAPH_CLI_NO_ANALYTICS=1` locally.
-2. Load the existing SEA-LION settings from the gitignored `.env` file.
+2. Load the configured real-model settings from the gitignored `.env` file.
 3. Run `uv run langgraph dev` from the project root.
 4. Open the Studio URL printed by the command.
 5. Select `sts2_text_to_sql` and submit a real statistical question.
@@ -342,14 +453,15 @@ The manual walkthrough is one explicit verification step:
 7. Submit one strategy question and confirm the graph follows the decline edge without
    executing SQL.
 
-This uses the real SEA-LION API. It is separate from automated tests and may incur API
+This uses the configured real-model API. SEA-LION is the initial baseline. The
+walkthrough is separate from automated tests and may incur API
 usage. With LangSmith tracing disabled, Studio connects to the local Agent Server
-without storing application traces in LangSmith. SEA-LION still receives the prompts
-because model inference is remote.
+without storing application traces in LangSmith. The configured provider still receives
+the prompts because model inference is remote.
 
 ## Automated Testing
 
-Automated tests never call SEA-LION or require network access.
+Automated tests never call a real model or require network access.
 
 Use fake chat models with scripted responses to cover:
 
@@ -382,7 +494,7 @@ Phase 3e is the formal real-model evaluation phase:
 ```text
 Phase 3d graph
     -> Phase 3a offline evaluator
-    -> real SEA-LION
+    -> configured real model
     -> 3 independent trials per case
 ```
 
@@ -408,7 +520,7 @@ Phase 3d is complete when:
 - The explicit `StateGraph` implements every documented node and edge.
 - All graph-path and parser tests pass without network calls.
 - The complete repository test suite passes.
-- A real SEA-LION statistical question succeeds through Studio.
+- A statistical question succeeds through Studio using the configured real model.
 - Studio visibly renders the graph and visited node state.
 - A real strategy question follows the decline path without SQLite execution.
 - No LangSmith application trace is created during the walkthrough.

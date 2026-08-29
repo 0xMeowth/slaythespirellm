@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build an explicit LangGraph `StateGraph` that routes questions, generates SQL with SEA-LION, validates and executes through Phase 3c, retries correctable failures up to three SQL-generation attempts, and can be inspected in LangGraph Studio.
+**Goal:** Build an explicit LangGraph `StateGraph` that routes questions, generates SQL with a configurable model, validates and executes through Phase 3c, retries correctable failures up to three SQL-generation attempts, and can be inspected in LangGraph Studio.
 
-**Architecture:** Keep graph state JSON-compatible and inject the model, schema context, database path, and execution limits when building the graph. SEA-LION only returns route decisions and SQL text; deterministic nodes parse, validate, execute, and control retries. Automated tests use scripted fake models, while one final Studio walkthrough uses real SEA-LION.
+**Architecture:** Keep graph state JSON-compatible and inject the model, schema context, database path, and execution limits when building the graph. The model only returns route decisions and SQL text; deterministic nodes parse, validate, execute, and control retries. Automated tests use scripted fake models, while one final Studio walkthrough uses the configured real model. SEA-LION is the initial baseline provider.
 
 **Tech Stack:** Python 3.13+, uv, LangChain `BaseChatModel`, LangGraph Graph API, LangGraph CLI in-memory server, SQLGlot, SQLite, and pytest.
 
@@ -22,7 +22,7 @@
 - Treat router-output failure and exhausted model transport failure as terminal pipeline failures.
 - Keep answer synthesis, Phase 3a evaluator integration, Langfuse, entity linking, and few-shot retrieval out of Phase 3d.
 - Automated tests must not use the network, API keys, or the frozen production-size database.
-- The manual Studio walkthrough must use real SEA-LION with `LANGSMITH_TRACING=false` and `LANGGRAPH_CLI_NO_ANALYTICS=1`.
+- The manual Studio walkthrough must use the configured real model with `LANGSMITH_TRACING=false` and `LANGGRAPH_CLI_NO_ANALYTICS=1`.
 - Show every proposed commit message before committing and never add a `Co-Authored-By` trailer.
 - Stop after each task for user code review before starting the next task.
 
@@ -767,7 +767,7 @@ Stop for approval before committing and before Task 6.
 
 ---
 
-### Task 6: Real SEA-LION Studio Walkthrough and Phase Completion
+### Task 6: Real-Model Studio Walkthrough and Phase Completion
 
 **Files:**
 - Modify: `ROADMAP.md`
@@ -801,7 +801,7 @@ uv run langgraph dev
 ```
 
 Expected: the command prints a local API URL and LangGraph Studio URL without exposing
-the SEA-LION API key.
+the model-provider API key.
 
 - [ ] **Step 3: Complete the required visual walkthrough**
 
@@ -864,7 +864,7 @@ verifies, and the diff check is clean.
 Mark Phase 3d `done` and record:
 
 - The observed full-suite test count.
-- Real SEA-LION Studio success.
+- Real-model Studio success using the configured provider.
 - Successful SQL and decline paths.
 - LangSmith tracing disabled.
 
@@ -894,7 +894,7 @@ Stop for approval before committing. Do not begin Phase 3e in this plan.
 - [ ] At most three SQL-generation attempts occur.
 - [ ] Model transport failure does not start a duplicate graph retry loop.
 - [ ] Automated tests make zero real model calls.
-- [ ] Studio walkthrough uses real SEA-LION.
+- [ ] Studio walkthrough uses the configured real model.
 - [ ] LangSmith tracing and CLI analytics are disabled for the walkthrough.
 - [ ] Phase 3a gold SQL and evaluator output never enter prompts or graph state.
 - [ ] Phase 3e remains pending.

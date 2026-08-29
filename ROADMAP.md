@@ -18,8 +18,8 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 3a Offline evaluation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
 | 3c SQL guardrails | done | none | SQLGlot policy + SQLite authorizer; read-only execution, timeout, row/byte limits, adversarial matrix; 310 tests |
-| 3d LangGraph pipeline | pending | none | explicit StateGraph; router → generate → validate → execute → retry; required Studio walkthrough with real SEA-LION |
-| 3e End-to-end baseline eval | pending | none | connect real SEA-LION LangGraph pipeline to offline evaluator; 3 independent trials per case |
+| 3d LangGraph pipeline | pending | none | explicit StateGraph; router → generate → validate → execute → retry; required Studio walkthrough with the configured real model |
+| 3e End-to-end baseline eval | pending | none | connect the real-model LangGraph pipeline to the offline evaluator; 3 independent trials per case |
 | 3f Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
 | 3g Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
 | 3h Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
@@ -92,8 +92,9 @@ Graph flow:
   route, SQL, safe error, attempt count, rows, and status. Add explicit `StateGraph`
   nodes for routing, generation, validation, execution, and retry control. Use fake
   models in automated tests, then complete one required LangGraph Studio walkthrough
-  with real SEA-LION and LangSmith tracing disabled.
-- **3e End-to-end baseline eval**: connect the real SEA-LION LangGraph pipeline to the
+  with the configured real model and LangSmith tracing disabled. SEA-LION is the initial
+  baseline provider, but the graph remains provider-agnostic.
+- **3e End-to-end baseline eval**: connect the real-model LangGraph pipeline to the
   Phase 3a offline evaluator. Run every case through three independent, cache-disabled
   trials and report execution accuracy, case-level score, first-attempt accuracy, and
   retry recovery.
