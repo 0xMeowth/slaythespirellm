@@ -1,3 +1,5 @@
+import hashlib
+import logging
 import math
 import sqlite3
 import time
@@ -6,13 +8,30 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nlq.schema_context import APPROVED_TABLES
-from nlq.sql_policy import APPROVED_FUNCTIONS, SqlGuardrailError, ValidatedSql
+from nlq.sql_policy import (
+    APPROVED_FUNCTIONS,
+    SqlGuardrailError,
+    ValidatedSql,
+    validate_sql,
+)
 
 
 QUERY_TIMEOUT_SECONDS = 10.0
 MAX_RESULT_ROWS = 200
 MAX_RESULT_BYTES = 1_000_000
 PROGRESS_HANDLER_INTERVAL = 1_000
+LOGGER = logging.getLogger("nlq.sql_guardrail")
+_REJECTION_CATEGORIES = {
+    "empty_sql",
+    "sql_too_long",
+    "parse_error",
+    "multiple_statements",
+    "non_query_statement",
+    "prohibited_operation",
+    "unapproved_table",
+    "unapproved_function",
+    "authorizer_denied",
+}
 
 
 @dataclass(frozen=True)
@@ -51,6 +70,55 @@ class SqlExecutionResult:
     rows: tuple[tuple[object, ...], ...]
     elapsed_ms: float
     truncated: bool
+
+
+def guard_and_execute_sql(
+    database: Path,
+    sql: str,
+    *,
+    limits: ExecutionLimits = ExecutionLimits(),
+    logger: logging.Logger = LOGGER,
+    clock: Callable[[], float] = time.monotonic,
+) -> SqlExecutionResult:
+    started = clock()
+    sql_sha256 = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+    outcome = "failed"
+    category = None
+    tables: tuple[str, ...] = ()
+    row_count = 0
+    truncated = False
+    try:
+        validated_sql = validate_sql(sql)
+        tables = validated_sql.tables
+        result = execute_validated_sql(
+            database,
+            validated_sql,
+            limits=limits,
+            clock=clock,
+        )
+        outcome = "allowed"
+        row_count = len(result.rows)
+        truncated = result.truncated
+        return result
+    except SqlGuardrailError as error:
+        category = error.category
+        if category in _REJECTION_CATEGORIES:
+            outcome = "rejected"
+        raise
+    finally:
+        logger.info(
+            "SQL guardrail outcome",
+            extra={
+                "event": "sql_guardrail",
+                "outcome": outcome,
+                "category": category,
+                "sql_sha256": sql_sha256,
+                "tables": tables,
+                "elapsed_ms": (clock() - started) * 1000,
+                "row_count": row_count,
+                "truncated": truncated,
+            },
+        )
 
 
 def execute_validated_sql(

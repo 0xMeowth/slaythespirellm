@@ -1,9 +1,15 @@
+import hashlib
+import logging
 import math
 import sqlite3
 
 import pytest
 
-from nlq.sql_executor import ExecutionLimits, execute_validated_sql
+from nlq.sql_executor import (
+    ExecutionLimits,
+    execute_validated_sql,
+    guard_and_execute_sql,
+)
 from nlq.sql_policy import SqlGuardrailError, ValidatedSql, validate_sql
 
 
@@ -131,3 +137,93 @@ def test_interrupts_query_after_deadline(analytical_database):
         )
 
     assert raised.value.category == "timeout"
+
+
+def test_guarded_path_validates_then_executes(analytical_database):
+    result = guard_and_execute_sql(
+        analytical_database,
+        "SELECT COUNT(*) AS run_count FROM runs",
+    )
+
+    assert result.columns == ("run_count",)
+    assert result.rows == ((0,),)
+
+
+def test_guarded_path_rejects_before_sqlite(analytical_database):
+    with pytest.raises(SqlGuardrailError) as raised:
+        guard_and_execute_sql(analytical_database, "SELECT * FROM raw_runs")
+
+    assert raised.value.category == "unapproved_table"
+
+
+def test_logs_one_success_outcome(analytical_database, caplog):
+    with caplog.at_level(logging.INFO, logger="nlq.sql_guardrail"):
+        guard_and_execute_sql(analytical_database, "SELECT COUNT(*) FROM runs")
+
+    records = _guardrail_records(caplog)
+    assert len(records) == 1
+    assert records[0].outcome == "allowed"
+    assert records[0].category is None
+    assert records[0].tables == ("runs",)
+    assert records[0].row_count == 1
+
+
+def test_logs_one_validation_rejection_without_full_sql(
+    analytical_database, caplog
+):
+    secret_literal = "do-not-log-this"
+    sql = f"SELECT '{secret_literal}' FROM raw_runs"
+
+    with caplog.at_level(logging.INFO, logger="nlq.sql_guardrail"):
+        with pytest.raises(SqlGuardrailError):
+            guard_and_execute_sql(analytical_database, sql)
+
+    records = _guardrail_records(caplog)
+    assert len(records) == 1
+    assert records[0].outcome == "rejected"
+    assert records[0].category == "unapproved_table"
+    assert secret_literal not in caplog.text
+    assert records[0].sql_sha256 == hashlib.sha256(sql.encode()).hexdigest()
+
+
+def test_logs_one_execution_failure(analytical_database, caplog):
+    with sqlite3.connect(analytical_database) as connection:
+        connection.execute(
+            "INSERT INTO cards(card_id, name) VALUES ('BIG', ?)",
+            ("x" * 1_000,),
+        )
+
+    with caplog.at_level(logging.INFO, logger="nlq.sql_guardrail"):
+        with pytest.raises(SqlGuardrailError):
+            guard_and_execute_sql(
+                analytical_database,
+                "SELECT name FROM cards",
+                limits=ExecutionLimits(max_result_bytes=100),
+            )
+
+    records = _guardrail_records(caplog)
+    assert len(records) == 1
+    assert records[0].outcome == "failed"
+    assert records[0].category == "result_too_large"
+
+
+def test_logs_one_authorizer_rejection(analytical_database, caplog, monkeypatch):
+    unchecked = ValidatedSql(sql="SELECT * FROM raw_runs", tables=(), functions=())
+    monkeypatch.setattr("nlq.sql_executor.validate_sql", lambda sql: unchecked)
+
+    with caplog.at_level(logging.INFO, logger="nlq.sql_guardrail"):
+        with pytest.raises(SqlGuardrailError):
+            guard_and_execute_sql(analytical_database, unchecked.sql)
+
+    records = _guardrail_records(caplog)
+    assert len(records) == 1
+    assert records[0].outcome == "rejected"
+    assert records[0].category == "authorizer_denied"
+
+
+def _guardrail_records(caplog):
+    return [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "sql_guardrail"
+    ]
