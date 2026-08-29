@@ -14,7 +14,7 @@ from eval.models import (
     ScoredTrial,
     TrialRecord,
 )
-from eval.runner import (
+from eval.run_evaluation import (
     GoldQueryError,
     calculate_metrics,
     collect_trial_records,
@@ -129,7 +129,7 @@ def test_prediction_execution_error_scores_zero(sample_database, caplog):
         RuntimeMetadata(1, 10.0),
     )
 
-    with caplog.at_level(logging.WARNING, logger="eval.runner"):
+    with caplog.at_level(logging.WARNING, logger="eval.run_evaluation"):
         scored = score_trial(sql_case(), record, sample_database, timeout_seconds=1.0)
 
     assert not scored.trial_passed
@@ -303,7 +303,7 @@ def test_run_evaluation_continues_after_prediction_error(sample_database, caplog
         ]
     )
 
-    with caplog.at_level(logging.INFO, logger="eval.runner"):
+    with caplog.at_level(logging.INFO, logger="eval.run_evaluation"):
         report = run_evaluation(
             manifest=sample_manifest(),
             database=sample_database,
@@ -342,7 +342,7 @@ def test_writes_report_as_json_atomically(tmp_path, sample_database, caplog):
     )
     path = tmp_path / "reports" / "test-run.json"
 
-    with caplog.at_level(logging.INFO, logger="eval.runner"):
+    with caplog.at_level(logging.INFO, logger="eval.run_evaluation"):
         write_report(report, path)
 
     raw = json.loads(path.read_text())

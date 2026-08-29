@@ -28,7 +28,7 @@
 - `eval/manifest.py` — snapshot manifest creation and SHA-256 verification.
 - `eval/sqlite_eval.py` — read-only SQL execution and timeout handling.
 - `eval/compare.py` — scalar, ordered, unordered, and float-tolerant comparison.
-- `eval/runner.py` — trial orchestration, scoring, metrics, and report writing.
+- `eval/run_evaluation.py` — trial orchestration, scoring, metrics, and report writing.
 - `eval/__main__.py` — manifest and case-validation CLI.
 - `eval/datasets/manifest.json` — frozen database metadata.
 - `eval/cases/development.json` — ten real StS2 development cases.
@@ -390,8 +390,8 @@ Proposed commit message: `Add deterministic SQL result scoring`
 
 **Files:**
 - Modify: `eval/models.py`
-- Create: `eval/runner.py`
-- Create: `tests/eval/test_runner.py`
+- Create: `eval/run_evaluation.py`
+- Create: `tests/eval/test_run_evaluation.py`
 
 **Interfaces:**
 - Produces: `collect_trial_records`, `score_trial`, `run_evaluation`, `EvaluationReport`, and `write_report`.
@@ -439,7 +439,7 @@ Assert these exact formulas:
 
 - [ ] **Step 5: Verify the tests fail**
 
-Run: `uv run python -m pytest tests/eval/test_runner.py -q`
+Run: `uv run python -m pytest tests/eval/test_run_evaluation.py -q`
 
 Expected: missing runner and report types.
 
@@ -483,7 +483,7 @@ never serialize unsupported objects with `default=str`.
 
 - [ ] **Step 9: Run tests**
 
-Run: `uv run python -m pytest tests/eval/test_runner.py -q`
+Run: `uv run python -m pytest tests/eval/test_run_evaluation.py -q`
 
 Expected: all orchestration, scoring, continuation, metric, and serialization tests pass.
 
@@ -709,7 +709,7 @@ Expected: all tests pass.
 Run:
 
 ```bash
-uv run python -c "import eval; from eval.runner import run_evaluation"
+uv run python -c "import eval; from eval.run_evaluation import run_evaluation"
 ```
 
 Expected: exit zero without output.
@@ -730,7 +730,7 @@ Expected: checksum and all eight gold SQL cases pass.
 Run:
 
 ```bash
-uv run python -m pytest tests/eval/test_runner.py -q -k "three_trials or report"
+uv run python -m pytest tests/eval/test_run_evaluation.py -q -k "three_trials or report"
 ```
 
 Expected: one case produces three independent trial records, three scored outputs, and
