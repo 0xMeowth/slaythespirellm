@@ -546,12 +546,17 @@ Stop for approval before committing and before Task 4.
 ### Task 4: SQL Correction and Three-Attempt Loop
 
 **Files:**
+- Create: `config.toml`
+- Create: `nlq/pipeline_settings.py`
+- Create: `tests/nlq/test_pipeline_settings.py`
 - Modify: `nlq/text_to_sql_graph.py`
 - Modify: `tests/nlq/test_text_to_sql_graph.py`
+- Modify: `docs/specs/phase-3d-langgraph-pipeline.md`
 
 **Interfaces:**
 - Preserves: `build_text_to_sql_graph(...)` and `run_text_to_sql_question(...)`.
-- Adds: `max_attempts: int = 3` behavior and correction-prompt construction.
+- Adds: required `max_attempts` behavior, tracked TOML configuration, and
+  correction-prompt construction.
 
 - [ ] **Step 1: Write failing validation-retry test**
 
@@ -634,6 +639,11 @@ error_message=model request failed
 
 Do not put provider exception text into graph state.
 
+Create tracked `config.toml` with `[nlq] max_attempts = 3` and a frozen
+`PipelineSettings` loaded through `tomllib`. Reject missing, boolean, non-integer, and
+non-positive values. Keep `max_attempts` required in `build_text_to_sql_graph()` so
+callers must pass the validated setting.
+
 - [ ] **Step 6: Run all graph and guardrail tests**
 
 Run:
@@ -672,8 +682,8 @@ Stop for approval before committing and before Task 5.
 - Modify: `uv.lock`
 
 **Interfaces:**
-- Consumes: existing `ModelSettings`, `build_chat_model()`, manifest verification,
-  `build_verified_schema_context()`, and Task 3 graph builder.
+- Consumes: existing `ModelSettings`, `PipelineSettings`, `build_chat_model()`, manifest
+  verification, `build_verified_schema_context()`, and Task 3 graph builder.
 - Produces: `create_studio_graph()` referenced by `langgraph.json`.
 
 - [ ] **Step 1: Add the local Agent Server dependency**
@@ -692,12 +702,13 @@ Test `create_studio_graph()` with monkeypatched dependency builders so it perfor
 network call and does not require the frozen database. Assert it:
 
 - Loads `ModelSettings` from the environment.
+- Loads `PipelineSettings` from root `config.toml`.
 - Calls `build_chat_model()` exactly once.
 - Builds verified schema context from `eval/datasets/manifest.json` and
   `nlq/schema_dictionary.json` under the supplied project root.
 - Resolves the manifest database through `verify_manifest()`.
-- Passes the model, schema context, and database path into
-  `build_text_to_sql_graph()`.
+- Passes the model, schema context, database path, and
+  `PipelineSettings.max_attempts` into `build_text_to_sql_graph()`.
 
 Keep public `create_studio_graph()` argument-free so the Agent Server can call it
 without dependency injection. Put path-dependent construction in an internal
@@ -731,10 +742,11 @@ Expected: collection fails because the Studio module and configuration do not ex
 `create_studio_graph()` must:
 
 1. Load and validate `ModelSettings`.
-2. Build the LangChain model without invoking it.
-3. Build verified Phase 3b schema context.
-4. Load and verify the frozen manifest to resolve the database path.
-5. Return `build_text_to_sql_graph(...)`.
+2. Load and validate root `config.toml` as `PipelineSettings`.
+3. Build the LangChain model without invoking it.
+4. Build verified Phase 3b schema context.
+5. Load and verify the frozen manifest to resolve the database path.
+6. Return `build_text_to_sql_graph(...)` with explicit `max_attempts`.
 
 Do not create a model request at module import. The `langgraph.json` target is the
 factory function, which the local Agent Server calls when it needs the graph.

@@ -53,6 +53,7 @@ def test_runs_sql_route_to_first_attempt_success(
         model=model,
         schema_context=schema_context,
         database=analytical_database,
+        max_attempts=3,
     )
 
     result = run_text_to_sql_question(
@@ -76,6 +77,7 @@ def test_declined_route_never_generates_or_executes_sql(
         model=model,
         schema_context=schema_context,
         database=analytical_database,
+        max_attempts=3,
     )
 
     result = run_text_to_sql_question(graph, "How should I build Silent?")
@@ -100,6 +102,7 @@ def test_router_receives_question_without_schema_and_generator_receives_both(
         model=model,
         schema_context=schema_context,
         database=analytical_database,
+        max_attempts=3,
     )
 
     run_text_to_sql_question(graph, question)
@@ -120,6 +123,7 @@ def test_graph_exposes_named_pipeline_nodes(analytical_database, schema_context)
         model=ScriptedChatModel([]),
         schema_context=schema_context,
         database=analytical_database,
+        max_attempts=3,
     )
 
     assert {
@@ -139,6 +143,7 @@ def test_malformed_router_response_fails_without_sql_generation(
         model=model,
         schema_context=schema_context,
         database=analytical_database,
+        max_attempts=3,
     )
 
     result = run_text_to_sql_question(graph, "How many runs are stored?")
@@ -147,6 +152,140 @@ def test_malformed_router_response_fails_without_sql_generation(
     assert result.error_category == "router_output_error"
     assert result.attempt_count == 0
     assert len(model.requests) == 1
+
+
+def test_retries_sql_rejected_by_validation(analytical_database, schema_context):
+    model = ScriptedChatModel(
+        [
+            '{"route":"sql","reason":"stored aggregate"}',
+            "SELECT COUNT(*) FROM raw_runs",
+            "SELECT COUNT(*) AS run_count FROM runs",
+        ]
+    )
+    graph = build_text_to_sql_graph(
+        model=model,
+        schema_context=schema_context,
+        database=analytical_database,
+        max_attempts=3,
+    )
+
+    result = run_text_to_sql_question(graph, "How many runs are stored?")
+
+    assert result.status == "succeeded"
+    assert result.generated_sql == "SELECT COUNT(*) AS run_count FROM runs"
+    assert result.attempt_count == 2
+    correction_prompt = _request_text(model.requests[2])
+    assert "Previous SQL: SELECT COUNT(*) FROM raw_runs" in correction_prompt
+    assert "Error category: unapproved_table" in correction_prompt
+    assert "Error message: unapproved table: raw_runs" in correction_prompt
+    assert "Traceback" not in correction_prompt
+    assert "API_KEY" not in correction_prompt
+
+
+def test_retries_sql_rejected_during_execution(
+    analytical_database, schema_context
+):
+    model = ScriptedChatModel(
+        [
+            '{"route":"sql","reason":"stored aggregate"}',
+            "SELECT missing_column FROM runs",
+            "SELECT COUNT(*) AS run_count FROM runs",
+        ]
+    )
+    graph = build_text_to_sql_graph(
+        model=model,
+        schema_context=schema_context,
+        database=analytical_database,
+        max_attempts=3,
+    )
+
+    result = run_text_to_sql_question(graph, "How many runs are stored?")
+
+    assert result.status == "succeeded"
+    assert result.attempt_count == 2
+    correction_prompt = _request_text(model.requests[2])
+    assert "Error category: execution_error" in correction_prompt
+    assert "Error message: SQLite could not execute the query" in correction_prompt
+
+
+def test_stops_after_maximum_sql_attempts(analytical_database, schema_context):
+    model = ScriptedChatModel(
+        [
+            '{"route":"sql","reason":"stored aggregate"}',
+            "SELECT * FROM raw_runs",
+            "SELECT * FROM sync_state",
+            "SELECT * FROM sync_log",
+        ]
+    )
+    graph = build_text_to_sql_graph(
+        model=model,
+        schema_context=schema_context,
+        database=analytical_database,
+        max_attempts=3,
+    )
+
+    result = run_text_to_sql_question(graph, "How many runs are stored?")
+
+    assert result.status == "failed"
+    assert result.generated_sql == "SELECT * FROM sync_log"
+    assert result.attempt_count == 3
+    assert result.error_category == "unapproved_table"
+    assert len(model.requests) == 4
+
+
+def test_retries_malformed_generated_output(analytical_database, schema_context):
+    model = ScriptedChatModel(
+        [
+            '{"route":"sql","reason":"stored aggregate"}',
+            "Here is the SQL query you requested.",
+            "SELECT COUNT(*) FROM runs",
+        ]
+    )
+    graph = build_text_to_sql_graph(
+        model=model,
+        schema_context=schema_context,
+        database=analytical_database,
+        max_attempts=3,
+    )
+
+    result = run_text_to_sql_question(graph, "How many runs are stored?")
+
+    assert result.status == "succeeded"
+    assert result.attempt_count == 2
+    assert "Error category: model_output_error" in _request_text(model.requests[2])
+
+
+def test_model_request_error_is_terminal(analytical_database, schema_context):
+    model = ScriptedChatModel(
+        [
+            '{"route":"sql","reason":"stored aggregate"}',
+            RuntimeError("provider failure containing a secret"),
+        ]
+    )
+    graph = build_text_to_sql_graph(
+        model=model,
+        schema_context=schema_context,
+        database=analytical_database,
+        max_attempts=3,
+    )
+
+    result = run_text_to_sql_question(graph, "How many runs are stored?")
+
+    assert result.status == "failed"
+    assert result.attempt_count == 1
+    assert result.error_category == "model_request_error"
+    assert result.error_message == "model request failed"
+    assert len(model.requests) == 2
+
+
+def test_rejects_nonpositive_maximum_attempts(analytical_database, schema_context):
+    with pytest.raises(ValueError, match="max_attempts must be positive"):
+        build_text_to_sql_graph(
+            model=ScriptedChatModel([]),
+            schema_context=schema_context,
+            database=analytical_database,
+            max_attempts=0,
+        )
 
 
 def _request_text(messages) -> str:

@@ -39,8 +39,12 @@ def build_text_to_sql_graph(
     model: BaseChatModel,
     schema_context: SchemaContext,
     database: Path,
+    max_attempts: int,
     execution_limits: ExecutionLimits = ExecutionLimits(),
 ) -> CompiledStateGraph:
+    if max_attempts <= 0:
+        raise ValueError("max_attempts must be positive")
+
     def route_question(state: TextToSqlState) -> dict:
         try:
             response = model.invoke(
@@ -70,6 +74,15 @@ def build_text_to_sql_graph(
 
     def generate_sql(state: TextToSqlState) -> dict:
         attempt_count = state["attempt_count"] + 1
+        user_message = f"Question:\n{state['question']}"
+        if state["error_category"] is not None:
+            previous_sql = state["generated_sql"] or "(no parseable SQL)"
+            user_message += (
+                f"\n\nPrevious SQL: {previous_sql}"
+                f"\nError category: {state['error_category']}"
+                f"\nError message: {state['error_message']}"
+                "\nCorrect the SQL and return only the new query."
+            )
         try:
             response = model.invoke(
                 [
@@ -79,7 +92,7 @@ def build_text_to_sql_graph(
                             f"Schema:\n{schema_context.text}"
                         )
                     ),
-                    HumanMessage(content=f"Question:\n{state['question']}"),
+                    HumanMessage(content=user_message),
                 ]
             )
             generated_sql = parse_generated_sql(response.content)
@@ -94,6 +107,7 @@ def build_text_to_sql_graph(
                 "attempt_count": attempt_count,
                 "error_category": "model_request_error",
                 "error_message": "model request failed",
+                "status": "failed",
             }
         return {
             "generated_sql": generated_sql,
@@ -132,7 +146,12 @@ def build_text_to_sql_graph(
         }
 
     def retry_or_finish(state: TextToSqlState) -> dict:
-        return {"status": "failed"}
+        if (
+            state["error_category"] == "model_request_error"
+            or state["attempt_count"] >= max_attempts
+        ):
+            return {"status": "failed"}
+        return {"status": "running"}
 
     graph = StateGraph(TextToSqlState)
     graph.add_node("route_question", route_question)
@@ -165,7 +184,12 @@ def build_text_to_sql_graph(
         if state["status"] == "succeeded"
         else "retry_or_finish",
     )
-    graph.add_edge("retry_or_finish", END)
+    graph.add_conditional_edges(
+        "retry_or_finish",
+        lambda state: "generate_sql"
+        if state["status"] == "running"
+        else END,
+    )
     return graph.compile()
 
 

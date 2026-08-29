@@ -333,12 +333,30 @@ route to `retry_or_finish`.
 
 This node does not call the model.
 
-- If `attempt_count < 3`, keep `status="running"` and return to `generate_sql`.
-- If `attempt_count == 3`, set `status="failed"` and end.
+- If `attempt_count < max_attempts`, keep `status="running"` and return to
+  `generate_sql`.
+- If `attempt_count == max_attempts`, set `status="failed"` and end.
 
 The maximum is three SQL-generation attempts, not three LangGraph executions. Model SDK
 transport retries controlled by `STS2_LLM_MAX_RETRIES` do not increment
 `attempt_count`.
+
+## Pipeline Configuration
+
+Non-secret pipeline settings live in the tracked root `config.toml`:
+
+```toml
+[nlq]
+max_attempts = 3
+```
+
+`load_pipeline_settings()` validates this file and returns an immutable
+`PipelineSettings`. Application factories load it once at startup and pass
+`settings.max_attempts` into the graph builder. The graph does not read configuration
+files or environment variables directly.
+
+Provider credentials and provider-specific model settings remain separate from this
+tracked configuration.
 
 ## Model Output Handling
 
@@ -363,7 +381,7 @@ build_text_to_sql_graph(
     model: BaseChatModel,
     schema_context: SchemaContext,
     database: Path,
-    max_attempts: int = 3,
+    max_attempts: int,
     execution_limits: ExecutionLimits = ExecutionLimits(),
 ) -> CompiledStateGraph
 ```
