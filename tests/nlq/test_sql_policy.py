@@ -148,3 +148,38 @@ def test_rejects_query_exceeding_ast_node_limit():
 def test_rejects_invalid_ast_node_limit():
     with pytest.raises(ValueError, match="max_ast_nodes must be positive"):
         validate_sql("SELECT 1", max_ast_nodes=0)
+
+
+@pytest.mark.parametrize(
+    ("sql", "category"),
+    [
+        ("SELECT * FROM raw_runs", "unapproved_table"),
+        ("SELECT * FROM sync_state", "unapproved_table"),
+        ("SELECT * FROM sync_log", "unapproved_table"),
+        ("SELECT sql FROM sqlite_schema", "unapproved_table"),
+        ("SELECT * FROM main.runs", "unapproved_table"),
+        ("SELECT load_extension('/tmp/payload')", "unapproved_function"),
+        ("SELECT readfile('/etc/passwd')", "unapproved_function"),
+        ("PRAGMA database_list", "non_query_statement"),
+        ("ATTACH DATABASE '/tmp/other.db' AS other", "non_query_statement"),
+        ("SELECT 1; SELECT 2", "multiple_statements"),
+        ("SELECT 1; DROP TABLE runs", "multiple_statements"),
+        (
+            "WITH RECURSIVE x(n) AS ("
+            "SELECT 1 UNION ALL SELECT n + 1 FROM x"
+            ") SELECT * FROM x",
+            "prohibited_operation",
+        ),
+    ],
+)
+def test_rejects_adversarial_sql(sql, category):
+    with pytest.raises(SqlGuardrailError) as raised:
+        validate_sql(sql)
+
+    assert raised.value.category == category
+
+
+def test_dangerous_words_inside_literal_do_not_change_policy():
+    sql = "SELECT 'DROP TABLE runs; ATTACH DATABASE' AS quoted_text FROM runs"
+
+    assert validate_sql(sql).sql == sql

@@ -221,6 +221,59 @@ def test_logs_one_authorizer_rejection(analytical_database, caplog, monkeypatch)
     assert records[0].category == "authorizer_denied"
 
 
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "ABS(ascension)",
+        "AVG(win)",
+        "COALESCE(game_mode, '')",
+        "COUNT(*)",
+        "DATE(start_time, 'unixepoch')",
+        "DATETIME(start_time, 'unixepoch')",
+        "DENSE_RANK() OVER (ORDER BY run_time)",
+        "IFNULL(game_mode, '')",
+        "IIF(win = 1, 'yes', 'no')",
+        "JULIANDAY('2026-01-01')",
+        "LAG(win) OVER (ORDER BY start_time)",
+        "LEAD(win) OVER (ORDER BY start_time)",
+        "LENGTH(character)",
+        "LOWER(character)",
+        "LTRIM(character)",
+        "MAX(ascension)",
+        "MIN(ascension)",
+        "NULLIF(game_mode, '')",
+        "RANK() OVER (ORDER BY run_time)",
+        "REPLACE(character, 'S', 's')",
+        "ROUND(AVG(win), 3)",
+        "ROW_NUMBER() OVER (ORDER BY run_time)",
+        "RTRIM(character)",
+        "STRFTIME('%Y', start_time, 'unixepoch')",
+        "SUBSTR(character, 1, 3)",
+        "SUM(win)",
+        "TOTAL(win)",
+        "TRIM(character)",
+        "UNIXEPOCH('2026-01-01')",
+        "UPPER(character)",
+    ],
+)
+def test_approved_functions_pass_both_policy_layers(analytical_database, expression):
+    result = guard_and_execute_sql(
+        analytical_database,
+        f"SELECT {expression} FROM runs",
+    )
+
+    assert len(result.columns) == 1
+
+
+def test_like_operator_passes_both_policy_layers(analytical_database):
+    result = guard_and_execute_sql(
+        analytical_database,
+        "SELECT character FROM runs WHERE character LIKE 'S%'",
+    )
+
+    assert result.columns == ("character",)
+
+
 def _guardrail_records(caplog):
     return [
         record

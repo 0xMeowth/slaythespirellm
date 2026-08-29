@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 import sqlglot
 from sqlglot import exp
@@ -100,7 +100,10 @@ def validate_sql(
 
 
 def _reject_recursive_cte(expression: exp.Query) -> None:
-    if any(with_clause.args.get("recursive") for with_clause in expression.find_all(exp.With)):
+    if any(
+        with_clause.args.get("recursive")
+        for with_clause in expression.find_all(exp.With)
+    ):
         raise SqlGuardrailError(
             "prohibited_operation", "recursive queries are not allowed"
         )
