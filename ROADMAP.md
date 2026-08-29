@@ -17,14 +17,14 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
 | 3a Eval foundation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
-| 3c SQL guardrails | pending | none | sqlglot validation, table allowlist, read-only execution limits |
+| 3c SQL guardrails | in-progress | none | technical specification drafted for review; implementation pending |
 | 3d LangGraph pipeline | pending | none | router → generate → validate → execute; retry failures up to 3 times |
 | 3e End-to-end baseline eval | pending | none | connect LangGraph to evaluator; 3 independent trials per case |
 | 3f Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
 | 3g Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
 | 3h Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
 | 4a Chat web UI | pending | none | thin frontend over nlq |
-| 4b Deploy | pending | none | portfolio hosting TBD |
+| 4b Deploy | pending | none | isolation requirements specified; hosting target pending |
 
 ## Phase Order
 
