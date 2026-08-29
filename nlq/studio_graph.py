@@ -5,6 +5,7 @@ from nlq.model_client import build_chat_model
 from nlq.model_settings import ModelSettings
 from nlq.pipeline_settings import load_pipeline_settings
 from nlq.schema_context import build_verified_schema_context
+from nlq.sql_executor import ExecutionLimits
 from nlq.text_to_sql_graph import build_text_to_sql_graph
 
 
@@ -32,4 +33,7 @@ def _create_studio_graph(project_root: Path):
         schema_context=schema_context,
         database=database,
         max_attempts=pipeline_settings.max_attempts,
+        execution_limits=ExecutionLimits(
+            timeout_seconds=pipeline_settings.query_timeout_seconds,
+        ),
     )

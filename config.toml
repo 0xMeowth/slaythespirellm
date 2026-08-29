@@ -1,2 +1,3 @@
 [nlq]
 max_attempts = 3
+query_timeout_seconds = 10.0

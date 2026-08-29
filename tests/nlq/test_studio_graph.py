@@ -4,13 +4,17 @@ from pathlib import Path
 from eval.models import DatasetManifest
 from nlq.pipeline_settings import PipelineSettings
 from nlq import studio_graph
+from nlq.sql_executor import ExecutionLimits
 
 
 def test_studio_factory_builds_graph_from_project_configuration(
     tmp_path, monkeypatch
 ):
     model_settings = object()
-    pipeline_settings = PipelineSettings(max_attempts=4)
+    pipeline_settings = PipelineSettings(
+        max_attempts=4,
+        query_timeout_seconds=12.5,
+    )
     model = object()
     schema_context = object()
     compiled_graph = object()
@@ -87,6 +91,7 @@ def test_studio_factory_builds_graph_from_project_configuration(
         "schema_context": schema_context,
         "database": (tmp_path / "data" / "eval.db").resolve(),
         "max_attempts": 4,
+        "execution_limits": ExecutionLimits(timeout_seconds=12.5),
     }
 
 

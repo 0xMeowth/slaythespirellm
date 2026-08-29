@@ -348,12 +348,14 @@ Non-secret pipeline settings live in the tracked root `config.toml`:
 ```toml
 [nlq]
 max_attempts = 3
+query_timeout_seconds = 10.0
 ```
 
 `load_pipeline_settings()` validates this file and returns an immutable
 `PipelineSettings`. Application factories load it once at startup and pass
-`settings.max_attempts` into the graph builder. The graph does not read configuration
-files or environment variables directly.
+`settings.max_attempts` and an `ExecutionLimits` built from
+`settings.query_timeout_seconds` into the graph builder. The graph does not read
+configuration files or environment variables directly.
 
 Provider credentials and provider-specific model settings remain separate from this
 tracked configuration.
