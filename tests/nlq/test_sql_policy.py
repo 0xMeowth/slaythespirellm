@@ -111,3 +111,40 @@ def test_rejects_recursive_cte():
         validate_sql(sql)
 
     assert raised.value.category == "prohibited_operation"
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT AVG(win), COUNT(*), ROUND(AVG(win), 3) FROM runs",
+        "SELECT LOWER(name), SUBSTR(name, 1, 3) FROM cards",
+        "SELECT character, ROW_NUMBER() OVER (ORDER BY run_time) FROM runs",
+        "SELECT name FROM cards WHERE name LIKE '%strike%'",
+        "SELECT CASE WHEN win = 1 THEN 'won' ELSE 'lost' END FROM runs",
+        "SELECT CAST(ascension AS TEXT) FROM runs",
+    ],
+)
+def test_accepts_approved_functions_and_normal_operators(sql):
+    assert validate_sql(sql).sql == sql
+
+
+@pytest.mark.parametrize("function", ["load_extension", "random", "unknown_func"])
+def test_rejects_unapproved_function(function):
+    with pytest.raises(SqlGuardrailError, match=function.upper()) as raised:
+        validate_sql(f"SELECT {function}() FROM runs")
+
+    assert raised.value.category == "unapproved_function"
+
+
+def test_rejects_query_exceeding_ast_node_limit():
+    sql = "SELECT " + " + ".join("1" for _ in range(100))
+
+    with pytest.raises(SqlGuardrailError) as raised:
+        validate_sql(sql, max_ast_nodes=20)
+
+    assert raised.value.category == "sql_too_long"
+
+
+def test_rejects_invalid_ast_node_limit():
+    with pytest.raises(ValueError, match="max_ast_nodes must be positive"):
+        validate_sql("SELECT 1", max_ast_nodes=0)

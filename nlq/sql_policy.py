@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 import sqlglot
 from sqlglot import exp
@@ -9,6 +10,43 @@ from nlq.schema_context import APPROVED_TABLES
 
 MAX_SQL_CHARACTERS = 20_000
 MAX_AST_NODES = 5_000
+APPROVED_FUNCTIONS = frozenset(
+    {
+        "ABS",
+        "AVG",
+        "COALESCE",
+        "COUNT",
+        "DATE",
+        "DATETIME",
+        "DENSE_RANK",
+        "IFNULL",
+        "IIF",
+        "JULIANDAY",
+        "LAG",
+        "LEAD",
+        "LENGTH",
+        "LIKE",
+        "LOWER",
+        "LTRIM",
+        "MAX",
+        "MIN",
+        "NULLIF",
+        "RANK",
+        "REPLACE",
+        "ROUND",
+        "ROW_NUMBER",
+        "RTRIM",
+        "STRFTIME",
+        "SUBSTR",
+        "SUM",
+        "TOTAL",
+        "TRIM",
+        "UNIXEPOCH",
+        "UPPER",
+    }
+)
+_FUNCTION_NAME = re.compile(r"^([A-Z_][A-Z0-9_]*)\s*\(")
+_FUNCTION_ALIASES = {"SUBSTRING": "SUBSTR"}
 
 
 @dataclass(frozen=True)
@@ -40,7 +78,11 @@ def validate_sql(
         raise SqlGuardrailError("sql_too_long", "SQL exceeds the character limit")
     try:
         statements = sqlglot.parse(sql, read="sqlite", max_nodes=max_ast_nodes)
-    except ParseError:
+    except ParseError as error:
+        if _is_ast_node_limit_error(error):
+            raise SqlGuardrailError(
+                "sql_too_long", "SQL exceeds the syntax-tree limit"
+            ) from None
         raise SqlGuardrailError("parse_error", "SQL could not be parsed") from None
     if len(statements) != 1:
         raise SqlGuardrailError(
@@ -53,14 +95,7 @@ def validate_sql(
         )
     _reject_recursive_cte(expression)
     tables = _physical_table_names(expression)
-    functions = tuple(
-        sorted(
-            {
-                function.sql_name().upper()
-                for function in expression.find_all(exp.Func)
-            }
-        )
-    )
+    functions = _validated_functions(expression)
     return ValidatedSql(sql=sql, tables=tables, functions=functions)
 
 
@@ -103,3 +138,38 @@ def _validate_table(table: exp.Table, cte_names: set[str]) -> str | None:
     if approved_name is None:
         raise SqlGuardrailError("unapproved_table", f"unapproved table: {name}")
     return approved_name
+
+
+def _validated_functions(expression: exp.Query) -> tuple[str, ...]:
+    names = {
+        function_name
+        for function in expression.find_all(exp.Func)
+        if (function_name := _function_name(function)) is not None
+    }
+    unknown = names - APPROVED_FUNCTIONS
+    if unknown:
+        raise SqlGuardrailError(
+            "unapproved_function", f"unapproved function: {sorted(unknown)[0]}"
+        )
+    return tuple(sorted(names))
+
+
+def _function_name(function: exp.Func) -> str | None:
+    if isinstance(function, exp.Cast):
+        return None
+    if isinstance(function, exp.Anonymous):
+        name = function.name.upper()
+    else:
+        rendered = function.sql(dialect="sqlite").upper()
+        match = _FUNCTION_NAME.match(rendered)
+        if match is None:
+            return None
+        name = match.group(1)
+    return _FUNCTION_ALIASES.get(name, name)
+
+
+def _is_ast_node_limit_error(error: ParseError) -> bool:
+    return any(
+        str(detail.get("description", "")).startswith("Maximum number of AST nodes")
+        for detail in error.errors
+    )
