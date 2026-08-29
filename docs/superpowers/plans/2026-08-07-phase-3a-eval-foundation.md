@@ -1,10 +1,10 @@
-# Phase 3a Eval Foundation Implementation Plan
+# Phase 3a Offline Evaluation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a deterministic, model-independent evaluator that versions the SQLite snapshot, loads verified StS2 cases, compares predicted-SQL results with gold-SQL results, runs three independent trials, and writes reproducible reports.
 
-**Architecture:** Separate authored case data, prediction generation, deterministic scoring, and reporting. The runner calls a predictor three times per case, attaches measured runtime metadata, and passes each trial record to a scorer using read-only SQLite. Phase 3a uses fake predictors; Phase 3e later supplies the real LangGraph predictor without changing scoring.
+**Architecture:** Separate authored case data, prediction generation, deterministic scoring, and reporting. The evaluator calls a predictor three times per case, attaches measured runtime metadata, and passes each trial record to a scorer using read-only SQLite. The Phase 3a offline evaluation uses fake predictors; Phase 3e later supplies the real LangGraph predictor without changing scoring.
 
 **Tech Stack:** Python 3.13+, uv, pytest, and stdlib `dataclasses`, `json`, `hashlib`, `sqlite3`, `statistics`, and `time`.
 
@@ -17,7 +17,7 @@
 - Disable response, semantic, memory, and shared-state caches during trials.
 - Never expose gold SQL, held-out cases, or evaluator output to the LLM.
 - Use only `runs`, `run_cards`, `run_relics`, `run_card_choices`, `cards`, and `relics`.
-- Do not add LangChain, LangGraph, Langfuse, SQLGlot, or DSPy in Phase 3a.
+- Do not add LangChain, LangGraph, Langfuse, SQLGlot, or DSPy to the Phase 3a offline evaluation.
 - Show every proposed commit message to the user before committing.
 - Never add a `Co-Authored-By` trailer.
 
@@ -738,7 +738,7 @@ case-level score `3/3`; no response or semantic cache is enabled.
 
 - [ ] **Step 5: Update roadmap status**
 
-Mark `3a Eval foundation` done only after Steps 1–4 pass. Leave `3e End-to-end baseline
+Mark `3a Offline evaluation` done only after Steps 1–4 pass. Leave `3e End-to-end baseline
 eval` pending because the real model and LangGraph pipeline do not exist. Note that ten
 development cases exist and the held-out split awaits expansion toward forty.
 
@@ -756,7 +756,7 @@ Expected: no database, secret, cache, or unrelated file is staged.
 
 - [ ] **Step 7: Request final documentation commit approval if needed**
 
-Proposed message: `Complete Phase 3a evaluation foundation`
+Proposed message: `Complete Phase 3a offline evaluation`
 
 Do not create an empty commit when Task 6 changes no files. Stop after Phase 3a and
 review Phase 3b before implementation.

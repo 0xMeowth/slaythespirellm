@@ -506,7 +506,7 @@ Expected: all Phase 3b tests pass with no credentials and no network calls.
 
 Run: `uv run python -m pytest -q`
 
-Expected: all existing 65 Phase 3a tests plus all Phase 3b tests pass.
+Expected: all existing 65 Phase 3a offline evaluation tests plus all Phase 3b tests pass.
 
 - [ ] **Step 3: Verify the frozen snapshot context**
 

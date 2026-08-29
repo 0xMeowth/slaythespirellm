@@ -1,4 +1,4 @@
-# Phase 3a — Evaluation System
+# Phase 3a — Offline Evaluation System
 
 ## Purpose
 
@@ -11,7 +11,7 @@ It provides the scoring foundation those systems can use later.
 
 ## Scope
 
-Phase 3a includes:
+The Phase 3a offline evaluation includes:
 
 - A versioned manifest for the frozen SQLite evaluation database.
 - Development and held-out question sets.
@@ -21,7 +21,7 @@ Phase 3a includes:
 - Router and SQL-generation metrics.
 - Machine-readable and console reports.
 
-Phase 3a excludes:
+The Phase 3a offline evaluation excludes:
 
 - The production LangGraph pipeline, implemented in Phase 3d.
 - Langfuse integration, implemented in Phase 3g.

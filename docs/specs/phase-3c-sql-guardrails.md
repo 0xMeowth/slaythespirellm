@@ -97,7 +97,7 @@ ROADMAP.md
 ```
 
 `eval/sqlite_eval.py` remains the evaluator's trusted gold/prediction executor. Phase
-3c does not silently change Phase 3a scoring behavior.
+3c does not silently change the Phase 3a offline evaluator's scoring behavior.
 
 ## Shared Policy Constants
 

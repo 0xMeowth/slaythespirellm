@@ -1020,7 +1020,7 @@ Run:
 uv run pytest -q
 ```
 
-Expected: all Phase 3a, 3b, and 3c tests pass.
+Expected: all tests from Phase 3a (offline evaluation), Phase 3b, and Phase 3c pass.
 
 - [ ] **Step 4: Run repository checks**
 

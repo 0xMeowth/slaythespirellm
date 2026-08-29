@@ -15,7 +15,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
-| 3a Eval foundation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
+| 3a Offline evaluation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
 | 3c SQL guardrails | done | none | SQLGlot policy + SQLite authorizer; read-only execution, timeout, row/byte limits, adversarial matrix; 310 tests |
 | 3d LangGraph pipeline | pending | none | router → generate → validate → execute; retry failures up to 3 times |
@@ -77,7 +77,7 @@ Graph flow:
 
 ### Build Order
 
-- **3a Eval foundation**: implement the approved evaluation specification. Freeze and
+- **3a Offline evaluation**: implement the approved evaluation specification. Freeze and
   identify the SQLite snapshot, create the initial development cases with verified gold
   SQL, and build the deterministic comparator, report format, and fixture-based tests.
   This stage proves scoring without requiring an LLM.
@@ -91,7 +91,7 @@ Graph flow:
 - **3d LangGraph pipeline**: define typed per-question state containing question,
   route, SQL, error, attempt count, rows, and answer. Add nodes for routing, generation,
   validation, execution, and retry control.
-- **3e End-to-end baseline eval**: connect the LangGraph pipeline to the Phase 3a
+- **3e End-to-end baseline eval**: connect the LangGraph pipeline to the Phase 3a offline
   evaluator. Run every case through three independent, cache-disabled trials and report
   execution accuracy, case-level score, first-attempt accuracy, and retry recovery.
 - **3f Answer synthesis**: turn successful result rows into a concise answer and return
