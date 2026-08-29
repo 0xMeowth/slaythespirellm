@@ -51,7 +51,8 @@ def validate_sql(
         raise SqlGuardrailError(
             "non_query_statement", "SQL must be a read-only query"
         )
-    tables = tuple(sorted({table.name for table in expression.find_all(exp.Table)}))
+    _reject_recursive_cte(expression)
+    tables = _physical_table_names(expression)
     functions = tuple(
         sorted(
             {
@@ -61,3 +62,44 @@ def validate_sql(
         )
     )
     return ValidatedSql(sql=sql, tables=tables, functions=functions)
+
+
+def _reject_recursive_cte(expression: exp.Query) -> None:
+    if any(with_clause.args.get("recursive") for with_clause in expression.find_all(exp.With)):
+        raise SqlGuardrailError(
+            "prohibited_operation", "recursive queries are not allowed"
+        )
+
+
+def _cte_names(expression: exp.Query) -> set[str]:
+    return {cte.alias_or_name.casefold() for cte in expression.find_all(exp.CTE)}
+
+
+def _physical_table_names(expression: exp.Query) -> tuple[str, ...]:
+    cte_names = _cte_names(expression)
+    physical_names = {
+        table_name
+        for table in expression.find_all(exp.Table)
+        if (table_name := _validate_table(table, cte_names)) is not None
+    }
+    return tuple(sorted(physical_names))
+
+
+def _validate_table(table: exp.Table, cte_names: set[str]) -> str | None:
+    name = table.name
+    if not table.db and not table.catalog and name.casefold() in cte_names:
+        return None
+    if table.db or table.catalog:
+        qualified_name = ".".join(
+            part for part in (table.catalog, table.db, name) if part
+        )
+        raise SqlGuardrailError(
+            "unapproved_table", f"unapproved table: {qualified_name}"
+        )
+    approved_by_normalized_name = {
+        approved.casefold(): approved for approved in APPROVED_TABLES
+    }
+    approved_name = approved_by_normalized_name.get(name.casefold())
+    if approved_name is None:
+        raise SqlGuardrailError("unapproved_table", f"unapproved table: {name}")
+    return approved_name
