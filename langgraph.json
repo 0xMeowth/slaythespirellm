@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "sts2_text_to_sql": "./nlq/studio_graph.py:create_studio_graph"
+  },
+  "env": ".env"
+}

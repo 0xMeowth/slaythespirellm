@@ -751,7 +751,8 @@ Expected: collection fails because the Studio module and configuration do not ex
 Do not create a model request at module import. The `langgraph.json` target is the
 factory function, which the local Agent Server calls when it needs the graph.
 
-Create the exact `langgraph.json` shape asserted in Step 3, including its schema URL.
+Create the exact `langgraph.json` shape asserted in Step 3 using only fields accepted by
+the installed LangGraph CLI.
 
 - [ ] **Step 6: Run automated Studio and full tests**
 
