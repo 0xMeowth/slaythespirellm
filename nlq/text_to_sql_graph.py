@@ -15,6 +15,7 @@ from nlq.text_to_sql_model_output import (
     parse_route_response,
 )
 from nlq.text_to_sql_state import (
+    TextToSqlInput,
     TextToSqlRunResult,
     TextToSqlState,
     create_initial_state,
@@ -46,6 +47,7 @@ def build_text_to_sql_graph(
         raise ValueError("max_attempts must be positive")
 
     def route_question(state: TextToSqlState) -> dict:
+        initial_state = create_initial_state(state["question"])
         try:
             response = model.invoke(
                 [
@@ -55,18 +57,18 @@ def build_text_to_sql_graph(
             )
             decision = parse_route_response(response.content)
         except ModelOutputError as error:
-            return {
+            return initial_state | {
                 "error_category": error.category,
                 "error_message": str(error),
                 "status": "failed",
             }
         except Exception:
-            return {
+            return initial_state | {
                 "error_category": "model_request_error",
                 "error_message": "model request failed",
                 "status": "failed",
             }
-        return {
+        return initial_state | {
             "route": decision.route,
             "route_reason": decision.reason,
             "status": "declined" if decision.route == "decline" else "running",
@@ -153,7 +155,7 @@ def build_text_to_sql_graph(
             return {"status": "failed"}
         return {"status": "running"}
 
-    graph = StateGraph(TextToSqlState)
+    graph = StateGraph(TextToSqlState, input_schema=TextToSqlInput)
     graph.add_node("route_question", route_question)
     graph.add_node("generate_sql", generate_sql)
     graph.add_node("validate_sql", validate_generated_sql)
@@ -196,5 +198,9 @@ def build_text_to_sql_graph(
 def run_text_to_sql_question(
     graph: CompiledStateGraph, question: str
 ) -> TextToSqlRunResult:
-    final_state = cast(TextToSqlState, graph.invoke(create_initial_state(question)))
+    initial_state = create_initial_state(question)
+    final_state = cast(
+        TextToSqlState,
+        graph.invoke({"question": initial_state["question"]}),
+    )
     return create_run_result(final_state)

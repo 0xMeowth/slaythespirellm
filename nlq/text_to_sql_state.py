@@ -7,6 +7,10 @@ Route: TypeAlias = Literal["sql", "decline"]
 RunStatus: TypeAlias = Literal["running", "succeeded", "declined", "failed"]
 
 
+class TextToSqlInput(TypedDict):
+    question: str
+
+
 class TextToSqlState(TypedDict):
     question: str
     route: Route | None

@@ -67,6 +67,28 @@ def test_runs_sql_route_to_first_attempt_success(
     assert len(model.requests) == 2
 
 
+def test_compiled_graph_accepts_question_only_input(
+    analytical_database, schema_context
+):
+    model = ScriptedChatModel(
+        [
+            '{"route":"sql","reason":"stored aggregate"}',
+            "SELECT COUNT(*) FROM runs",
+        ]
+    )
+    graph = build_text_to_sql_graph(
+        model=model,
+        schema_context=schema_context,
+        database=analytical_database,
+        max_attempts=3,
+    )
+
+    final_state = graph.invoke({"question": "How many runs are stored?"})
+
+    assert final_state["status"] == "succeeded"
+    assert final_state["attempt_count"] == 1
+
+
 def test_declined_route_never_generates_or_executes_sql(
     analytical_database, schema_context
 ):
