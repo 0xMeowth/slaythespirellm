@@ -1,7 +1,7 @@
 # ROADMAP — StS2 Text-to-SQL
 
 Talk-to-the-database agent over Slay the Spire 2 community run data
-(Spire Codex API → SQLite → text-to-SQL pipeline → web UI).
+(Spire Codex API → ingestion → native DuckDB analytics → text-to-SQL pipeline → web UI).
 
 ## Progress Tracker
 
@@ -15,6 +15,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
+| 2g Native DuckDB analytics | pending | none | migrate six analytical tables; adapt ingestion/query/eval boundaries; ADR 001 accepted |
 | 3a Offline evaluation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
 | 3c SQL guardrails | done | none | SQLGlot policy + SQLite authorizer; read-only execution, timeout, row/byte limits, adversarial matrix; 310 tests |
@@ -56,6 +57,11 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
   **Verification:** row count ≥ 100k; sync_log row status=ok
 - **2f Incremental sync + cron**: resume from sync_state cursor; sync_log start/finish rows; crontab entry.
   **Verification:** run sync twice, second run fetches only new runs, no duplicate PKs
+- **2g Native DuckDB analytics**: implement ADR 001 for runs, run_cards, run_relics,
+  run_card_choices, cards, and relics. Preserve SQLite until DuckDB ingestion, security,
+  snapshots, gold-query results, and row counts pass verification. Decide raw_runs and
+  sync metadata storage separately.
+  **Verification:** all eight benchmark results match SQLite; full test suite passes
 
 ## Phase 3 — Text-to-SQL
 
@@ -153,8 +159,11 @@ Graph flow:
 - Promote corrected production questions into the library only after human review and
   SQL verification.
 
-### Optional Optimization and External Benchmarks
+### Performance and External Benchmarks
 
+- Query-performance evidence and remaining optimization hypotheses are tracked in
+  `docs/query-performance-benchmarks.md`. ADR 001 adopts native DuckDB for the six
+  analytical tables; the implementation remains pending in stage 2g.
 - After the LangChain/LangGraph baseline is measured, DSPy may optimize the SQL
   generator's instructions and few-shot examples against execution accuracy. DSPy is
   an offline optimizer for that node; it does not replace LangGraph, SQL guardrails, or
