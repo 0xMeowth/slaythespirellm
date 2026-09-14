@@ -19,7 +19,7 @@
 - Open SQLite with `mode=ro`, disable extensions, and install an authorizer before preparation.
 - Default limits: 20,000 SQL characters, 5,000 AST nodes, 10 seconds, 200 rows, and 1,000,000 result bytes.
 - Automated tests use temporary databases, no model, no API key, no network, and no external SSD.
-- Do not change `eval/sqlite_eval.py`; Phase 3e performs evaluator integration.
+- Do not change `eval/sqlite_eval.py`; Phase 3f performs evaluator integration.
 - Do not implement LangGraph, retry logic, answer synthesis, Langfuse, or deployment isolation.
 - Follow test-driven development and commit after each completed task.
 

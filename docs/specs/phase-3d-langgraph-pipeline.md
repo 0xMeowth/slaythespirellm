@@ -21,17 +21,17 @@ Phase 3d includes:
 - LLM-based SQL generation using the verified Phase 3b schema context.
 - Deterministic SQL validation and restricted execution through Phase 3c.
 - Safe correction feedback and no more than three SQL-generation attempts.
-- A small public result object for later Phase 3e evaluation integration.
+- A small public result object for later Phase 3f evaluation integration.
 - Deterministic automated tests using fake chat models.
 - A manual LangGraph Studio walkthrough using the configured real model.
 
 Phase 3d excludes:
 
-- Natural-language answer synthesis, implemented in Phase 3f.
-- Formal multi-case and three-trial model evaluation, implemented in Phase 3e.
-- Langfuse tracing and experiment dashboards, implemented in Phase 3g.
+- Natural-language answer synthesis, implemented in Phase 3g.
+- Formal multi-case and three-trial model evaluation, implemented in Phase 3f.
+- Langfuse tracing and experiment dashboards, implemented in Phase 3h.
 - Entity linking, few-shot retrieval, and semantic-view experiments, implemented in
-  Phase 3h.
+  Phase 3i.
 - Conversation memory and follow-up-question resolution.
 - Production deployment and operating-system isolation, implemented in Phase 4b.
 
@@ -72,7 +72,7 @@ runtime. Add `langgraph-cli[inmem]` to the development dependency group because 
 uses the local in-memory Agent Server during development.
 
 Do not add LangSmith tracing or Langfuse dependencies in Phase 3d. Studio is used with
-LangSmith tracing disabled; persistent observability remains Phase 3g.
+LangSmith tracing disabled; persistent observability remains Phase 3h.
 
 ## Graph
 
@@ -411,7 +411,7 @@ rows
 result_truncated
 ```
 
-Phase 3e will adapt this result to the existing offline evaluator's predictor contract.
+Phase 3f will adapt this result to the existing offline evaluator's predictor contract.
 The Phase 3d graph must not import evaluation cases or gold SQL.
 
 ## Files
@@ -509,7 +509,7 @@ Phase 3d performs a small real-model integration test through Studio. This catch
 provider-specific response formatting, prompt-following, and API compatibility problems
 that fake models cannot reveal.
 
-Phase 3e is the formal real-model evaluation phase:
+Phase 3f is the formal real-model evaluation phase:
 
 ```text
 Phase 3d graph
@@ -518,7 +518,7 @@ Phase 3d graph
     -> 3 independent trials per case
 ```
 
-For the initial ten development cases, Phase 3e therefore performs thirty independent
+For the initial ten development cases, Phase 3f therefore performs thirty independent
 real pipeline runs. Fake models remain in unit tests because they make failures fast,
 deterministic, and reproducible.
 
@@ -529,7 +529,7 @@ deterministic, and reproducible.
 - Do not expose hidden schemas, API keys, gold SQL, or evaluator outputs to the model.
 - Do not send application traces to LangSmith during the Studio walkthrough.
 - Do not add Langfuse in Phase 3d; its self-hosted versus managed deployment is decided
-  in Phase 3g.
+  in Phase 3h.
 - Deployment-level filesystem, process, and network isolation remains mandatory in
   Phase 4b.
 
@@ -544,5 +544,5 @@ Phase 3d is complete when:
 - Studio visibly renders the graph and visited node state.
 - A real strategy question follows the decline path without SQLite execution.
 - No LangSmith application trace is created during the walkthrough.
-- The Phase 3e evaluator handoff can consume `TextToSqlRunResult` without reading graph
+- The Phase 3f evaluator handoff can consume `TextToSqlRunResult` without reading graph
   internals.

@@ -212,6 +212,27 @@ These large differences establish that native DuckDB storage is materially bette
 this workload. The fixed run order still prevents these values from being treated as
 precise stable latency estimates.
 
+### Experiment: Native DuckDB Resource Limits
+
+The eight fixed queries were run once with fresh read-only connections under the
+proposed application limits. DuckDB reported the requested `memory_limit = "4GB"` as
+an effective 3.7 GiB and used four threads. Each query had a 10-second timeout.
+
+| Question | Default DuckDB (12.7 GiB, 8 threads) | Limited DuckDB (3.7 GiB, 4 threads) | Result hash matched? |
+|---|---:|---:|---|
+| Q1 | 0.462 s | 0.777 s | Yes |
+| Q2 | 0.012 s | 0.009 s | Yes |
+| Q3 | 0.145 s | 0.176 s | Yes |
+| Q4 | 0.004 s | 0.005 s | Yes |
+| Q5 | 0.610 s | 0.576 s | Yes |
+| Q6 | 0.004 s | 0.007 s | Yes |
+| Q7 | 0.086 s | 0.136 s | Yes |
+| Q8 | 0.150 s | 0.119 s | Yes |
+
+All queries completed below one second. Adopt 4 GB, four threads, and a 10-second query
+timeout as the initial local application limits. These settings bound resources without
+materially changing the earlier performance conclusion.
+
 ## Benchmark Method
 
 1. Use a disposable or newly versioned snapshot on the external SSD; never modify the

@@ -276,7 +276,7 @@ class SqlExecutionResult:
     truncated: bool
 ```
 
-Phase 3d stores this result in graph state. Phase 3e converts it into the evaluator's
+Phase 3d stores this result in graph state. Phase 3f converts it into the evaluator's
 existing result representation.
 
 ## Errors
@@ -330,7 +330,7 @@ row_count=<number>
 truncated=<true-or-false>
 ```
 
-Normal logs omit the full SQL and user question. Phase 3g may record them in Langfuse
+Normal logs omit the full SQL and user question. Phase 3h may record them in Langfuse
 under its separate access and retention policy.
 
 ## Prompt-Injection Boundary
@@ -414,7 +414,7 @@ Phase 3c is complete when:
 - `ROADMAP.md` records the final test count and marks Phase 3c done.
 
 Phase 3c does not claim that SEA-LION can generate correct SQL. Phase 3d connects these
-guardrails to generation and retries; Phase 3e measures end-to-end accuracy.
+guardrails to generation and retries; Phase 3f measures end-to-end accuracy.
 
 ## Design References
 

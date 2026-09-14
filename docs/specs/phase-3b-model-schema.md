@@ -31,7 +31,7 @@ Phase 3b excludes:
 - Langfuse integration.
 - Few-shot question-to-SQL examples.
 
-Those concerns remain in Phases 3c–3g.
+Those concerns remain in Phases 3c–3i.
 
 ## Dependencies
 
@@ -243,7 +243,7 @@ The dictionary does not duplicate SQLite types. Types come from live schema
 inspection, preventing type information from drifting in two places.
 
 Do not include full sample rows in the Phase 3b baseline. Targeted values are more
-compact and less arbitrary. Full sample rows remain a Phase 3h A/B experiment.
+compact and less arbitrary. Full sample rows remain a Phase 3i A/B experiment.
 
 Do not list all 577 card IDs or 296 relic IDs. Entity resolution later injects only
 question-relevant candidates.

@@ -15,15 +15,15 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
-| 2g Native DuckDB analytics | pending | none | migrate six analytical tables; adapt ingestion/query/eval boundaries; ADR 001 accepted |
 | 3a Offline evaluation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
 | 3c SQL guardrails | done | none | SQLGlot policy + SQLite authorizer; read-only execution, timeout, row/byte limits, adversarial matrix; 310 tests |
 | 3d LangGraph pipeline | pending | none | explicit StateGraph; router → generate → validate → execute → retry; required Studio walkthrough with the configured real model |
-| 3e End-to-end baseline eval | pending | none | connect the real-model LangGraph pipeline to the offline evaluator; 3 independent trials per case |
-| 3f Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
-| 3g Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
-| 3h Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
+| 3e Frozen DuckDB analytics | pending | none | migrate six analytical tables; adapt query/eval boundaries; ADR 001 accepted |
+| 3f End-to-end baseline eval | pending | none | connect the real-model LangGraph pipeline to the offline evaluator; 3 independent trials per case |
+| 3g Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
+| 3h Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
+| 3i Accuracy experiments | pending | none | A/B test semantic views, entity linking, and few-shot retrieval separately |
 | 4a Chat web UI | pending | none | thin frontend over nlq |
 | 4b Deploy | pending | none | isolation requirements specified; hosting target pending |
 
@@ -33,7 +33,7 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 |-------|-------|----------------|
 | 1 Foundation | 1a–1b | — |
 | 2 Ingestion | 2a–2f | 1b schema |
-| 3 Text-to-SQL | 3a–3h | 2d data present |
+| 3 Text-to-SQL | 3a–3i | 2d data present |
 | 4 Web UI | 4a–4b | 3 pipeline works |
 
 ## Phase 1 — Foundation
@@ -57,12 +57,6 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
   **Verification:** row count ≥ 100k; sync_log row status=ok
 - **2f Incremental sync + cron**: resume from sync_state cursor; sync_log start/finish rows; crontab entry.
   **Verification:** run sync twice, second run fetches only new runs, no duplicate PKs
-- **2g Native DuckDB analytics**: implement ADR 001 for runs, run_cards, run_relics,
-  run_card_choices, cards, and relics. Preserve SQLite until DuckDB ingestion, security,
-  snapshots, gold-query results, and row counts pass verification. Decide raw_runs and
-  sync metadata storage separately.
-  **Verification:** all eight benchmark results match SQLite; full test suite passes
-
 ## Phase 3 — Text-to-SQL
 
 ### Architecture
@@ -100,17 +94,22 @@ Graph flow:
   models in automated tests, then complete one required LangGraph Studio walkthrough
   with the configured real model and LangSmith tracing disabled. SEA-LION is the initial
   baseline provider, but the graph remains provider-agnostic.
-- **3e End-to-end baseline eval**: connect the real-model LangGraph pipeline to the
+- **3e Frozen DuckDB analytics**: implement ADR 001 for runs, run_cards, run_relics,
+  run_card_choices, cards, and relics. Create a verified frozen DuckDB snapshot while
+  preserving SQLite as the migration source and raw/control store. Adapt schema
+  inspection, validation, execution, evaluation, and LangGraph dependencies.
+  **Verification:** all eight benchmark results match SQLite; full test suite passes
+- **3f End-to-end baseline eval**: connect the real-model LangGraph pipeline to the
   Phase 3a offline evaluator. Run every case through three independent, cache-disabled
   trials and report execution accuracy, case-level score, first-attempt accuracy, and
   retry recovery.
-- **3f Answer synthesis**: turn successful result rows into a concise answer and return
+- **3g Answer synthesis**: turn successful result rows into a concise answer and return
   the generated SQL for transparency. Core v1 evals grade rows, not prose; answer
   faithfulness judging is optional later work.
-- **3g Langfuse observability**: record one trace per question and spans for graph nodes,
+- **3h Langfuse observability**: record one trace per question and spans for graph nodes,
   including prompts, model outputs, timing, token usage, errors, and execution-accuracy
   scores. Group full eval sweeps as named experiments for before/after comparison.
-- **3h Accuracy experiments**: start with a measurable baseline, then test semantic SQL
+- **3i Accuracy experiments**: start with a measurable baseline, then test semantic SQL
   views, entity linking, and few-shot retrieval separately. Change one variable per
   experiment while holding the model, dataset, and other settings fixed. Keep additions
   that improve held-out results; record each experiment's accuracy change.
@@ -163,7 +162,7 @@ Graph flow:
 
 - Query-performance evidence and remaining optimization hypotheses are tracked in
   `docs/query-performance-benchmarks.md`. ADR 001 adopts native DuckDB for the six
-  analytical tables; the implementation remains pending in stage 2g.
+  analytical tables; the implementation remains pending in stage 3e.
 - After the LangChain/LangGraph baseline is measured, DSPy may optimize the SQL
   generator's instructions and few-shot examples against execution accuracy. DSPy is
   an offline optimizer for that node; it does not replace LangGraph, SQL guardrails, or

@@ -24,7 +24,7 @@ The Phase 3a offline evaluation includes:
 The Phase 3a offline evaluation excludes:
 
 - The production LangGraph pipeline, implemented in Phase 3d.
-- Langfuse integration, implemented in Phase 3g.
+- Langfuse integration, implemented in Phase 3h.
 - DSPy or other prompt optimization.
 - Production response caching.
 - Evaluation of strategy or advice answer quality.
@@ -469,7 +469,7 @@ Before Phase 3a is complete:
 
 ## Later Integration
 
-Phase 3e connects the evaluator to the LangGraph pipeline. Phase 3g sends each trial's
+Phase 3f connects the evaluator to the LangGraph pipeline. Phase 3h sends each trial's
 trace, spans, scores, and metadata to Langfuse and groups complete runs as named
 experiments. These integrations must use the deterministic evaluator's result as the
 execution-accuracy source of truth.

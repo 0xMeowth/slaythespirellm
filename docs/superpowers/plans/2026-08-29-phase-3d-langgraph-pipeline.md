@@ -881,7 +881,7 @@ Mark Phase 3d `done` and record:
 - Successful SQL and decline paths.
 - LangSmith tracing disabled.
 
-Leave Phase 3e pending because formal three-trial real-model evaluation is separate.
+Leave Phase 3f pending because formal three-trial real-model evaluation is separate.
 
 - [ ] **Step 7: Review checkpoint and final Phase 3d commit**
 
@@ -910,4 +910,4 @@ Stop for approval before committing. Do not begin Phase 3e in this plan.
 - [ ] Studio walkthrough uses the configured real model.
 - [ ] LangSmith tracing and CLI analytics are disabled for the walkthrough.
 - [ ] Phase 3a gold SQL and evaluator output never enter prompts or graph state.
-- [ ] Phase 3e remains pending.
+- [ ] Phase 3f remains pending.

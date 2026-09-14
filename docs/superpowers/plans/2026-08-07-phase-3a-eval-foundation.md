@@ -4,7 +4,7 @@
 
 **Goal:** Build a deterministic, model-independent evaluator that versions the SQLite snapshot, loads verified StS2 cases, compares predicted-SQL results with gold-SQL results, runs three independent trials, and writes reproducible reports.
 
-**Architecture:** Separate authored case data, prediction generation, deterministic scoring, and reporting. The evaluator calls a predictor three times per case, attaches measured runtime metadata, and passes each trial record to a scorer using read-only SQLite. The Phase 3a offline evaluation uses fake predictors; Phase 3e later supplies the real LangGraph predictor without changing scoring.
+**Architecture:** Separate authored case data, prediction generation, deterministic scoring, and reporting. The evaluator calls a predictor three times per case, attaches measured runtime metadata, and passes each trial record to a scorer using read-only SQLite. The Phase 3a offline evaluation uses fake predictors; Phase 3f later supplies the real LangGraph predictor without changing scoring.
 
 **Tech Stack:** Python 3.13+, uv, pytest, and stdlib `dataclasses`, `json`, `hashlib`, `sqlite3`, `statistics`, and `time`.
 
@@ -546,7 +546,7 @@ Expected: failure because `eval.__main__` does not exist.
 - `cases validate`: verify the snapshot, load cases, execute all gold SQL read-only,
   and print SQL-case and router-case counts plus short previews.
 
-Do not add an LLM command. Phase 3e adds the live LangGraph adapter.
+Do not add an LLM command. Phase 3f adds the live LangGraph adapter.
 
 - [ ] **Step 4: Author ten development cases**
 
@@ -738,7 +738,7 @@ case-level score `3/3`; no response or semantic cache is enabled.
 
 - [ ] **Step 5: Update roadmap status**
 
-Mark `3a Offline evaluation` done only after Steps 1–4 pass. Leave `3e End-to-end baseline
+Mark `3a Offline evaluation` done only after Steps 1–4 pass. Leave `3f End-to-end baseline
 eval` pending because the real model and LangGraph pipeline do not exist. Note that ten
 development cases exist and the held-out split awaits expansion toward forty.
 
