@@ -8,6 +8,8 @@ from pathlib import Path
 class PipelineSettings:
     max_attempts: int
     query_timeout_seconds: float
+    duckdb_memory_limit: str
+    duckdb_threads: int
 
 
 def load_pipeline_settings(path: Path) -> PipelineSettings:
@@ -33,7 +35,24 @@ def load_pipeline_settings(path: Path) -> PipelineSettings:
         raise ValueError(
             "nlq.query_timeout_seconds must be a finite positive number"
         )
+    duckdb_memory_limit = nlq_settings.get("duckdb_memory_limit")
+    if (
+        not isinstance(duckdb_memory_limit, str)
+        or not duckdb_memory_limit.strip()
+    ):
+        raise ValueError(
+            "nlq.duckdb_memory_limit must be a non-empty string"
+        )
+    duckdb_threads = nlq_settings.get("duckdb_threads")
+    if (
+        not isinstance(duckdb_threads, int)
+        or isinstance(duckdb_threads, bool)
+        or duckdb_threads <= 0
+    ):
+        raise ValueError("nlq.duckdb_threads must be a positive integer")
     return PipelineSettings(
         max_attempts=max_attempts,
         query_timeout_seconds=float(query_timeout_seconds),
+        duckdb_memory_limit=duckdb_memory_limit,
+        duckdb_threads=duckdb_threads,
     )

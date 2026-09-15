@@ -38,7 +38,7 @@
 - Consumes: `[nlq]` values from `config.toml`.
 - Produces: `PipelineSettings(max_attempts, query_timeout_seconds, duckdb_memory_limit, duckdb_threads)`.
 
-- [ ] **Step 1: Write failing settings tests**
+- [x] **Step 1: Write failing settings tests**
 
 Add tests proving valid DuckDB settings load and invalid values fail:
 
@@ -73,13 +73,13 @@ def test_rejects_invalid_duckdb_memory_limit(tmp_path, value):
         load_pipeline_settings(path)
 ```
 
-- [ ] **Step 2: Run the focused tests and confirm failure**
+- [x] **Step 2: Run the focused tests and confirm failure**
 
 Run: `uv run pytest tests/nlq/test_pipeline_settings.py -q`
 
 Expected: failures because `PipelineSettings` has no DuckDB fields.
 
-- [ ] **Step 3: Add DuckDB and settings**
+- [x] **Step 3: Add DuckDB and settings**
 
 Add `duckdb>=1.5.5` through uv. Extend the settings type and loader:
 
@@ -101,7 +101,7 @@ duckdb_threads = 4
 
 Do not read these values from `.env`.
 
-- [ ] **Step 4: Run focused and full tests**
+- [x] **Step 4: Run focused and full tests**
 
 Run: `uv run pytest tests/nlq/test_pipeline_settings.py -q`
 
@@ -111,7 +111,7 @@ Run: `uv run pytest -q`
 
 Expected: the complete suite passes.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
 Proposed commit: `build: add DuckDB runtime settings`
 
