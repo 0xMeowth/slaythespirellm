@@ -133,7 +133,7 @@ Stop for review before committing.
 - Produces: `create_snapshot(source: Path, output: Path, schema: Path, link: Path | None = None) -> dict[str, int]`.
 - Produces: a verified native DuckDB file containing `ANALYTICAL_TABLES` only.
 
-- [ ] **Step 1: Write failing native-schema tests**
+- [x] **Step 1: Write failing native-schema tests**
 
 Create tests using small temporary DuckDB files only:
 
@@ -163,13 +163,13 @@ def test_duckdb_schema_preserves_primary_keys(tmp_path):
 
 Add lifecycle tests proving existing output and temporary files are rejected, failures remove only the temporary target, and the symlink is updated only after verification.
 
-- [ ] **Step 2: Run the snapshot tests and confirm failure**
+- [x] **Step 2: Run the snapshot tests and confirm failure**
 
 Run: `uv run pytest tests/eval/test_snapshot.py tests/eval/test_cli.py -q`
 
 Expected: failures because the schema and DuckDB snapshot API do not exist.
 
-- [ ] **Step 3: Add the explicit DuckDB schema**
+- [x] **Step 3: Add the explicit DuckDB schema**
 
 Translate the six current SQLite tables to DuckDB without redesigning them:
 
@@ -190,7 +190,7 @@ CREATE TABLE cards (
 
 Define all remaining columns in the same order as `schema.sql`. Use `VARCHAR` for current text representations and `INTEGER` for current integer/boolean-like representations. Do not add analytical indexes yet.
 
-- [ ] **Step 4: Implement trusted snapshot creation**
+- [x] **Step 4: Implement trusted snapshot creation**
 
 Keep trusted migration SQL separate from generated SQL. Structure `eval/snapshot.py` around these helpers:
 
@@ -234,7 +234,7 @@ def _copy_approved_tables(connection) -> None:
 
 Use `<output>.tmp`, `CHECKPOINT`, close the connection, verify the temporary file, then atomically rename it. Create or replace `link` last. Unit-test copy and verification helpers with native temporary DuckDB catalogs; test `_attach_sqlite_source` with a fake connection so automated tests never install an extension.
 
-- [ ] **Step 5: Update the snapshot CLI**
+- [x] **Step 5: Update the snapshot CLI**
 
 Support:
 
@@ -248,7 +248,7 @@ uv run python -m eval snapshot create \
 
 The CLI prints each copied row count and the final file and link paths.
 
-- [ ] **Step 6: Run focused and full tests**
+- [x] **Step 6: Run focused and full tests**
 
 Run: `uv run pytest tests/eval/test_snapshot.py tests/eval/test_cli.py -q`
 
@@ -258,7 +258,7 @@ Run: `uv run pytest -q`
 
 Expected: the complete suite passes.
 
-- [ ] **Step 7: Review and commit**
+- [x] **Step 7: Review and commit**
 
 Proposed commit: `feat: create native DuckDB evaluation snapshots`
 

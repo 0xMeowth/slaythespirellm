@@ -3,12 +3,15 @@ import os
 import sqlite3
 import subprocess
 import sys
+from argparse import Namespace
+from importlib import import_module
 from pathlib import Path
 
 from eval.cases import load_cases
 from eval.manifest import create_manifest, write_manifest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+eval_main = import_module("eval.__main__")
 
 
 def run_cli(working_directory, *arguments):
@@ -105,36 +108,54 @@ def test_manifest_create_inspects_database_and_writes_json(tmp_path):
     assert "Created manifest: " in completed.stdout
 
 
-def test_snapshot_create_writes_compact_database(tmp_path):
+def test_snapshot_create_passes_schema_and_link_to_creator(
+    tmp_path, monkeypatch, capsys
+):
     source = tmp_path / "source.db"
-    create_test_database(source)
-    with sqlite3.connect(source) as connection:
-        connection.executescript(
-            """
-            CREATE TABLE cards (card_id TEXT);
-            CREATE TABLE relics (relic_id TEXT);
-            CREATE TABLE run_cards (run_id TEXT);
-            CREATE TABLE run_relics (run_id TEXT);
-            CREATE TABLE run_card_choices (run_id TEXT);
-            CREATE TABLE raw_runs (line_gz BLOB);
-            """
-        )
-    output = tmp_path / "eval.db"
+    output = tmp_path / "eval.duckdb"
+    schema = tmp_path / "schema.sql"
+    link = tmp_path / "current.duckdb"
+    captured = {}
 
-    completed = run_cli(
-        tmp_path,
-        "snapshot",
-        "create",
-        "--source",
-        str(source),
-        "--output",
-        str(output),
+    def fake_create_snapshot(source_path, output_path, schema_path, link_path):
+        captured["arguments"] = (
+            source_path,
+            output_path,
+            schema_path,
+            link_path,
+        )
+        return {table: 1 for table in eval_main.ANALYTICAL_TABLES}
+
+    monkeypatch.setattr(eval_main, "create_snapshot", fake_create_snapshot)
+
+    eval_main._create_snapshot(
+        Namespace(source=source, output=output, schema=schema, link=link)
     )
 
-    assert completed.returncode == 0, completed.stderr
-    assert output.exists()
-    assert "Created snapshot: " in completed.stdout
-    assert "6 analytical tables" in completed.stdout
+    assert captured["arguments"] == (source, output, schema, link)
+    assert "Created snapshot: " in capsys.readouterr().out
+
+
+def test_snapshot_parser_accepts_schema_and_link_arguments():
+    parser = eval_main._build_parser()
+
+    args = parser.parse_args(
+        [
+            "snapshot",
+            "create",
+            "--source",
+            "source.db",
+            "--output",
+            "snapshot.duckdb",
+            "--schema",
+            "duckdb_analytics_schema.sql",
+            "--link",
+            "data/current.duckdb",
+        ]
+    )
+
+    assert args.schema == Path("duckdb_analytics_schema.sql")
+    assert args.link == Path("data/current.duckdb")
 
 
 def test_manifest_verify_accepts_matching_database(tmp_path):

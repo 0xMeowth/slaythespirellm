@@ -41,6 +41,8 @@ def _build_parser() -> argparse.ArgumentParser:
     snapshot_create = snapshot_commands.add_parser("create")
     snapshot_create.add_argument("--source", type=Path, required=True)
     snapshot_create.add_argument("--output", type=Path, required=True)
+    snapshot_create.add_argument("--schema", type=Path, required=True)
+    snapshot_create.add_argument("--link", type=Path)
     snapshot_create.set_defaults(handler=_create_snapshot)
 
     manifest = commands.add_parser("manifest")
@@ -69,11 +71,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _create_snapshot(args: argparse.Namespace) -> None:
-    counts = create_snapshot(args.source, args.output)
+    counts = create_snapshot(args.source, args.output, args.schema, args.link)
     print(
         f"Created snapshot: {args.output} "
         f"({len(ANALYTICAL_TABLES)} analytical tables)"
     )
+    if args.link is not None:
+        print(f"Snapshot link: {args.link}")
     for table, count in counts.items():
         print(f"{table}: {count}")
 

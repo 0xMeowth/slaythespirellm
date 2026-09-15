@@ -1,6 +1,8 @@
 import logging
-import sqlite3
 from pathlib import Path
+
+import duckdb
+
 
 logger = logging.getLogger(__name__)
 
@@ -14,72 +16,116 @@ ANALYTICAL_TABLES = (
 )
 
 
-def create_snapshot(source: Path, output: Path) -> dict[str, int]:
-    """Copy only analytical tables and indexes into a new SQLite database."""
-    if output.exists():
+def create_snapshot(
+    source: Path,
+    output: Path,
+    schema: Path,
+    link: Path | None = None,
+) -> dict[str, int]:
+    """Create and publish a native DuckDB analytical snapshot."""
+    if output.exists() or output.is_symlink():
         raise FileExistsError(f"snapshot already exists: {output}")
 
-    table_sql, index_sql = _load_schema(source)
     temporary = output.with_suffix(output.suffix + ".tmp")
-    if temporary.exists():
+    if temporary.exists() or temporary.is_symlink():
         raise FileExistsError(f"temporary snapshot already exists: {temporary}")
+    if link is not None and link.resolve(strict=False) == output.resolve(strict=False):
+        raise ValueError("snapshot link must differ from output")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
-        temporary_uri = f"file:{temporary.resolve()}?mode=rwc"
-        with sqlite3.connect(temporary_uri, uri=True) as connection:
-            connection.execute("PRAGMA journal_mode = OFF")
-            connection.execute("PRAGMA synchronous = OFF")
-            for statement in table_sql:
-                connection.execute(statement)
-            source_uri = f"file:{source.resolve()}?mode=ro"
-            connection.execute("ATTACH DATABASE ? AS source", (source_uri,))
-            for table in ANALYTICAL_TABLES:
-                logger.info("Copying table: %s", table)
-                connection.execute(
-                    f'INSERT INTO "{table}" SELECT * FROM source."{table}"'
-                )
-            connection.commit()
-            connection.execute("DETACH DATABASE source")
-            logger.info("Creating %d indexes", len(index_sql))
-            for statement in index_sql:
-                connection.execute(statement)
-            logger.info("Analyzing snapshot")
-            connection.execute("ANALYZE")
-            counts = {
-                table: connection.execute(
-                    f'SELECT COUNT(*) FROM "{table}"'
-                ).fetchone()[0]
-                for table in ANALYTICAL_TABLES
-            }
+        with duckdb.connect(str(temporary)) as connection:
+            _apply_schema(connection, schema)
+            _attach_sqlite_source(connection, source)
+            _copy_approved_tables(connection)
+            counts = _verify_snapshot(connection)
+            connection.execute("DETACH source_sqlite")
+            connection.execute("CHECKPOINT")
         temporary.replace(output)
+        if link is not None:
+            _replace_link(link, output)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
     return counts
 
 
-def _load_schema(source: Path) -> tuple[list[str], list[str]]:
-    uri = f"file:{source.resolve()}?mode=ro"
-    with sqlite3.connect(uri, uri=True) as connection:
-        table_rows = connection.execute(
-            "SELECT name, sql FROM sqlite_master "
-            "WHERE type = 'table' AND name IN (?, ?, ?, ?, ?, ?)",
-            ANALYTICAL_TABLES,
-        ).fetchall()
-        found = {name for name, _ in table_rows}
-        missing = set(ANALYTICAL_TABLES) - found
-        if missing:
-            names = ", ".join(sorted(missing))
-            raise ValueError(f"missing analytical tables: {names}")
-        table_by_name = {name: sql for name, sql in table_rows}
-        indexes = connection.execute(
-            "SELECT sql FROM sqlite_master "
-            "WHERE type = 'index' AND tbl_name IN (?, ?, ?, ?, ?, ?) "
-            "AND sql IS NOT NULL ORDER BY name",
-            ANALYTICAL_TABLES,
-        ).fetchall()
-    return (
-        [table_by_name[table] for table in ANALYTICAL_TABLES],
-        [row[0] for row in indexes],
+def apply_duckdb_schema(database: Path, schema: Path) -> None:
+    database.parent.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect(str(database)) as connection:
+        _apply_schema(connection, schema)
+
+
+def _apply_schema(connection, schema: Path) -> None:
+    connection.execute(schema.read_text())
+
+
+def _attach_sqlite_source(connection, source: Path) -> None:
+    source_literal = _sql_string_literal(source.resolve())
+    connection.execute("INSTALL sqlite")
+    connection.execute("LOAD sqlite")
+    connection.execute(
+        f"ATTACH {source_literal} AS source_sqlite (TYPE sqlite, READ_ONLY)"
     )
+
+
+def _copy_approved_tables(connection) -> None:
+    source_tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT table_name FROM duckdb_tables() "
+            "WHERE database_name = 'source_sqlite'"
+        ).fetchall()
+    }
+    missing = set(ANALYTICAL_TABLES) - source_tables
+    if missing:
+        names = ", ".join(sorted(missing))
+        raise ValueError(f"missing analytical tables: {names}")
+
+    for table in ANALYTICAL_TABLES:
+        logger.info("Copying table: %s", table)
+        connection.execute(
+            f'INSERT INTO "{table}" SELECT * FROM source_sqlite."{table}"'
+        )
+
+
+def _verify_snapshot(connection) -> dict[str, int]:
+    target_tables = {
+        row[0] for row in connection.execute("SHOW TABLES").fetchall()
+    }
+    expected_tables = set(ANALYTICAL_TABLES)
+    if target_tables != expected_tables:
+        missing = expected_tables - target_tables
+        unexpected = target_tables - expected_tables
+        details = []
+        if missing:
+            details.append(f"missing: {', '.join(sorted(missing))}")
+        if unexpected:
+            details.append(f"unexpected: {', '.join(sorted(unexpected))}")
+        raise ValueError(f"invalid analytical tables ({'; '.join(details)})")
+    return {
+        table: int(
+            connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+        )
+        for table in ANALYTICAL_TABLES
+    }
+
+
+def _replace_link(link: Path, output: Path) -> None:
+    if link.exists() and not link.is_symlink():
+        raise FileExistsError(f"snapshot link path is not a symlink: {link}")
+    temporary_link = link.with_name(link.name + ".tmp")
+    if temporary_link.exists() or temporary_link.is_symlink():
+        raise FileExistsError(f"temporary snapshot link already exists: {temporary_link}")
+
+    link.parent.mkdir(parents=True, exist_ok=True)
+    temporary_link.symlink_to(output.resolve())
+    try:
+        temporary_link.replace(link)
+    except Exception:
+        temporary_link.unlink(missing_ok=True)
+        raise
+
+
+def _sql_string_literal(value: Path) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
