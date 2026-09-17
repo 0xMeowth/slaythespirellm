@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import duckdb
+
 from eval.models import DatasetManifest
 from nlq.pipeline_settings import PipelineSettings
 from nlq import studio_graph
@@ -22,12 +24,15 @@ def test_studio_factory_builds_graph_from_project_configuration(
     compiled_graph = object()
     manifest = DatasetManifest(
         dataset_id="test-dataset",
+        engine="duckdb",
+        engine_version=duckdb.__version__,
         database="data/eval.db",
         created_at="2026-08-10T00:00:00+00:00",
         earliest_run_date="2026-07-01",
         latest_run_date="2026-08-01",
         run_count=1,
         database_sha256="database-sha256",
+        source_database_sha256="source-database-sha256",
         schema_git_commit="abc123",
     )
     calls = {}

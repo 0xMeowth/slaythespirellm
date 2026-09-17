@@ -1,20 +1,25 @@
 import hashlib
 import json
-import sqlite3
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+import duckdb
+
 from eval.models import DatasetManifest
+from eval.snapshot import ANALYTICAL_TABLES
 
 MANIFEST_FIELDS = {
     "dataset_id",
+    "engine",
+    "engine_version",
     "database",
     "created_at",
     "earliest_run_date",
     "latest_run_date",
     "run_count",
     "database_sha256",
+    "source_database_sha256",
     "schema_git_commit",
 }
 HASH_CHUNK_SIZE = 8 * 1024 * 1024
@@ -32,33 +37,32 @@ def create_manifest(
     *,
     dataset_id: str,
     database: Path,
+    source_database: Path,
     manifest_database_path: str,
     schema_git_commit: str,
-    run_count: int,
-    earliest_run_date: str,
-    latest_run_date: str,
     created_at: str | None = None,
 ) -> DatasetManifest:
     if Path(manifest_database_path).is_absolute():
         raise ValueError("manifest database path must be relative")
-    if run_count < 1:
-        raise ValueError("run_count must be positive")
+    run_count, earliest_run_date, latest_run_date = inspect_runs(database)
 
     return DatasetManifest(
         dataset_id=_nonempty(dataset_id, "dataset_id"),
+        engine="duckdb",
+        engine_version=duckdb.__version__,
         database=_nonempty(manifest_database_path, "database"),
         created_at=created_at or datetime.now(UTC).isoformat(),
         earliest_run_date=_nonempty(earliest_run_date, "earliest_run_date"),
         latest_run_date=_nonempty(latest_run_date, "latest_run_date"),
         run_count=run_count,
         database_sha256=sha256_file(database),
+        source_database_sha256=sha256_file(source_database),
         schema_git_commit=_nonempty(schema_git_commit, "schema_git_commit"),
     )
 
 
 def inspect_runs(database: Path) -> tuple[int, str, str]:
-    uri = f"file:{database.resolve()}?mode=ro"
-    with sqlite3.connect(uri, uri=True) as connection:
+    with duckdb.connect(str(database.resolve()), read_only=True) as connection:
         row = connection.execute(
             "SELECT COUNT(*), MIN(submitted_at), MAX(submitted_at) FROM runs"
         ).fetchone()
@@ -101,6 +105,13 @@ def load_manifest(path: Path) -> DatasetManifest:
 
 
 def verify_manifest(manifest: DatasetManifest, project_root: Path) -> Path:
+    if manifest.engine != "duckdb":
+        raise ValueError("manifest engine must be duckdb")
+    if manifest.engine_version != duckdb.__version__:
+        raise ValueError(
+            "DuckDB version mismatch: "
+            f"expected {manifest.engine_version}, got {duckdb.__version__}"
+        )
     database = (project_root / manifest.database).resolve()
     if not database.exists():
         raise FileNotFoundError(f"database not found: {manifest.database}")
@@ -109,6 +120,30 @@ def verify_manifest(manifest: DatasetManifest, project_root: Path) -> Path:
         raise ValueError(
             "database checksum mismatch: "
             f"expected {manifest.database_sha256}, got {actual_sha256}"
+        )
+    with duckdb.connect(str(database), read_only=True) as connection:
+        actual_tables = {
+            str(row[0]) for row in connection.execute("SHOW TABLES").fetchall()
+        }
+    expected_tables = set(ANALYTICAL_TABLES)
+    missing_tables = expected_tables - actual_tables
+    if missing_tables:
+        names = ", ".join(sorted(missing_tables))
+        raise ValueError(f"missing analytical tables: {names}")
+    unexpected_tables = actual_tables - expected_tables
+    if unexpected_tables:
+        names = ", ".join(sorted(unexpected_tables))
+        raise ValueError(f"unexpected analytical tables: {names}")
+    run_count, earliest, latest = inspect_runs(database)
+    if run_count != manifest.run_count:
+        raise ValueError(
+            f"run count mismatch: expected {manifest.run_count}, got {run_count}"
+        )
+    if earliest != manifest.earliest_run_date or latest != manifest.latest_run_date:
+        raise ValueError(
+            "run date coverage mismatch: "
+            f"expected {manifest.earliest_run_date} to {manifest.latest_run_date}, "
+            f"got {earliest} to {latest}"
         )
     return database
 

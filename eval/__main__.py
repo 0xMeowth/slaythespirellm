@@ -8,12 +8,11 @@ from pathlib import Path
 from eval.cases import load_cases
 from eval.manifest import (
     create_manifest,
-    inspect_runs,
     load_manifest,
     verify_manifest,
     write_manifest,
 )
-from eval.sqlite_eval import QueryExecutionError, execute_query
+from eval.query_execution import QueryExecutionError, execute_query
 from eval.snapshot import ANALYTICAL_TABLES, create_snapshot
 
 
@@ -50,6 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     create = manifest_commands.add_parser("create")
     create.add_argument("--database", type=Path, required=True)
+    create.add_argument("--source-database", type=Path, required=True)
     create.add_argument("--dataset-id", required=True)
     create.add_argument("--schema-git-commit", required=True)
     create.add_argument("--output", type=Path, required=True)
@@ -85,18 +85,16 @@ def _create_snapshot(args: argparse.Namespace) -> None:
 def _create_manifest(args: argparse.Namespace) -> None:
     project_root = Path.cwd()
     database = _from_project_root(args.database, project_root)
-    run_count, earliest, latest = inspect_runs(database)
+    source_database = _from_project_root(args.source_database, project_root)
     manifest = create_manifest(
         dataset_id=args.dataset_id,
         database=database,
+        source_database=source_database,
         manifest_database_path=_relative_database_path(
             args.database,
             project_root,
         ),
         schema_git_commit=args.schema_git_commit,
-        run_count=run_count,
-        earliest_run_date=earliest,
-        latest_run_date=latest,
     )
     write_manifest(manifest, args.output)
     print(f"Created manifest: {args.output}")

@@ -1,10 +1,11 @@
 import hashlib
 import re
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
+
+import duckdb
 
 from eval.manifest import load_manifest, verify_manifest
 from eval.models import DatasetManifest
@@ -19,7 +20,7 @@ APPROVED_TABLES = (
     "cards",
     "relics",
 )
-RENDERER_VERSION = "1"
+RENDERER_VERSION = "2"
 _JOIN_EXPRESSION = re.compile(
     r"(?P<left_table>[A-Za-z_][A-Za-z0-9_]*)\.(?P<left_column>[A-Za-z_][A-Za-z0-9_]*)"
     r"\s*=\s*"
@@ -34,7 +35,7 @@ _FORBIDDEN_METADATA_NAME = re.compile(
 @dataclass(frozen=True)
 class ColumnSchema:
     name: str
-    sqlite_type: str
+    database_type: str
     nullable: bool
     primary_key: bool
 
@@ -104,11 +105,15 @@ _schema_context_cache = SchemaContextCache()
 
 
 def inspect_approved_schema(database: Path) -> DatabaseSchema:
-    uri = f"file:{database.resolve()}?mode=ro"
     tables: list[TableSchema] = []
-    with sqlite3.connect(uri, uri=True) as connection:
+    with duckdb.connect(str(database.resolve()), read_only=True) as connection:
         for table_name in APPROVED_TABLES:
-            rows = connection.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+            try:
+                rows = connection.execute(
+                    f'PRAGMA table_info("{table_name}")'
+                ).fetchall()
+            except duckdb.CatalogException:
+                raise ValueError(f"missing approved table: {table_name}") from None
             if not rows:
                 raise ValueError(f"missing approved table: {table_name}")
             tables.append(
@@ -117,7 +122,7 @@ def inspect_approved_schema(database: Path) -> DatabaseSchema:
                     columns=tuple(
                         ColumnSchema(
                             name=str(row[1]),
-                            sqlite_type=str(row[2]),
+                            database_type=str(row[2]),
                             nullable=not bool(row[3]),
                             primary_key=bool(row[5]),
                         )
@@ -323,7 +328,7 @@ def _validate_joins(table_name: str, joins, schema_tables: dict[str, TableSchema
 def _render_column_schema(column: ColumnSchema) -> str:
     attributes = [
         column.name,
-        column.sqlite_type,
+        column.database_type,
         "nullable" if column.nullable else "not null",
     ]
     if column.primary_key:

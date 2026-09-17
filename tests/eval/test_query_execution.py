@@ -1,14 +1,13 @@
-import sqlite3
-
+import duckdb
 import pytest
 
-from eval.sqlite_eval import QueryExecutionError, execute_query
+from eval.query_execution import QueryExecutionError, execute_query
 
 
-def test_executes_select_read_only(sample_database):
+def test_executes_query_read_only(sample_database):
     result = execute_query(
         sample_database,
-        "SELECT label, value FROM numbers ORDER BY label, rowid",
+        "SELECT label, value FROM numbers ORDER BY label, value",
         timeout_seconds=1.0,
     )
 
@@ -32,18 +31,15 @@ def test_rejects_writes_in_read_only_mode(sample_database):
         )
 
     assert error.value.category == "execution_error"
-    with sqlite3.connect(sample_database) as connection:
+    with duckdb.connect(str(sample_database), read_only=True) as connection:
         assert connection.execute("SELECT COUNT(*) FROM numbers").fetchone() == (3,)
 
 
 def test_interrupts_query_after_timeout(sample_database):
     sql = """
-        WITH RECURSIVE count(value) AS (
-            SELECT 1
-            UNION ALL
-            SELECT value + 1 FROM count
-        )
-        SELECT SUM(value) FROM count
+        SELECT SUM(left_values.value * right_values.value)
+        FROM range(1000000000) AS left_values(value)
+        CROSS JOIN range(1000000000) AS right_values(value)
     """
 
     with pytest.raises(QueryExecutionError) as error:

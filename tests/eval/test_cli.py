@@ -1,11 +1,12 @@
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 from argparse import Namespace
 from importlib import import_module
 from pathlib import Path
+
+import duckdb
 
 from eval.cases import load_cases
 from eval.manifest import create_manifest, write_manifest
@@ -27,28 +28,28 @@ def run_cli(working_directory, *arguments):
 
 
 def create_test_database(path):
-    with sqlite3.connect(path) as connection:
-        connection.executescript(
-            """
-            CREATE TABLE runs (submitted_at TEXT NOT NULL);
-            INSERT INTO runs VALUES ('2026-06-01'), ('2026-07-29');
-            CREATE TABLE numbers (value INTEGER NOT NULL);
-            INSERT INTO numbers VALUES (1), (2), (3);
-            """
+    with duckdb.connect(str(path)) as connection:
+        connection.execute((PROJECT_ROOT / "duckdb_analytics_schema.sql").read_text())
+        connection.execute(
+            "INSERT INTO runs "
+            "(run_id, character, win, was_abandoned, ascension, submitted_at) "
+            "VALUES "
+            "('run-1', 'SILENT', 0, 0, 0, '2026-06-01'), "
+            "('run-2', 'SILENT', 1, 0, 0, '2026-07-29')"
         )
 
 
 def create_test_manifest(tmp_path):
     database = tmp_path / "snapshot.db"
+    source_database = tmp_path / "source.db"
+    source_database.write_bytes(b"source")
     create_test_database(database)
     manifest = create_manifest(
         dataset_id="test-dataset",
         database=database,
+        source_database=source_database,
         manifest_database_path="snapshot.db",
         schema_git_commit="abc123",
-        run_count=2,
-        earliest_run_date="2026-06-01",
-        latest_run_date="2026-07-29",
         created_at="2026-08-08T00:00:00+00:00",
     )
     manifest_path = tmp_path / "manifest.json"
@@ -56,17 +57,17 @@ def create_test_manifest(tmp_path):
     return database, manifest_path
 
 
-def write_cases(path, gold_sql="SELECT COUNT(*) FROM numbers"):
+def write_cases(path, gold_sql="SELECT COUNT(*) FROM runs"):
     path.write_text(
         json.dumps(
             [
                 {
-                    "id": "number_count",
-                    "question": "How many numbers are stored?",
+                    "id": "run_count",
+                    "question": "How many runs are stored?",
                     "expected_route": "sql",
                     "gold_sql": gold_sql,
                     "comparison": {"mode": "scalar"},
-                    "tags": ["numbers", "count"],
+                    "tags": ["runs", "count"],
                 },
                 {
                     "id": "strategy",
@@ -82,6 +83,8 @@ def write_cases(path, gold_sql="SELECT COUNT(*) FROM numbers"):
 
 def test_manifest_create_inspects_database_and_writes_json(tmp_path):
     database = tmp_path / "snapshot.db"
+    source_database = tmp_path / "source.db"
+    source_database.write_bytes(b"source")
     create_test_database(database)
     output = tmp_path / "manifest.json"
 
@@ -91,6 +94,8 @@ def test_manifest_create_inspects_database_and_writes_json(tmp_path):
         "create",
         "--database",
         "snapshot.db",
+        "--source-database",
+        "source.db",
         "--dataset-id",
         "test-dataset",
         "--schema-git-commit",
@@ -102,6 +107,9 @@ def test_manifest_create_inspects_database_and_writes_json(tmp_path):
     assert completed.returncode == 0, completed.stderr
     raw = json.loads(output.read_text())
     assert raw["database"] == "snapshot.db"
+    assert raw["engine"] == "duckdb"
+    assert raw["engine_version"] == duckdb.__version__
+    assert raw["source_database_sha256"]
     assert raw["run_count"] == 2
     assert raw["earliest_run_date"] == "2026-06-01"
     assert raw["latest_run_date"] == "2026-07-29"
@@ -175,7 +183,8 @@ def test_manifest_verify_accepts_matching_database(tmp_path):
 
 def test_manifest_verify_reports_checksum_mismatch_without_traceback(tmp_path):
     database, manifest_path = create_test_manifest(tmp_path)
-    database.write_bytes(b"changed")
+    with duckdb.connect(str(database)) as connection:
+        connection.execute("CREATE TABLE changed (value INTEGER)")
 
     completed = run_cli(
         tmp_path,
@@ -206,7 +215,7 @@ def test_cases_validate_executes_gold_sql_and_counts_routes(tmp_path):
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "number_count: [[3]]" in completed.stdout
+    assert "run_count: [[2]]" in completed.stdout
     assert "Validated 1 SQL cases and 1 router cases" in completed.stdout
 
 
@@ -226,13 +235,14 @@ def test_cases_validate_reports_invalid_gold_sql_without_traceback(tmp_path):
     )
 
     assert completed.returncode == 1
-    assert "gold SQL failed for number_count" in completed.stderr
+    assert "gold SQL failed for run_count" in completed.stderr
     assert "Traceback" not in completed.stderr
 
 
 def test_debug_flag_includes_traceback(tmp_path):
     database, manifest_path = create_test_manifest(tmp_path)
-    database.write_bytes(b"changed")
+    with duckdb.connect(str(database)) as connection:
+        connection.execute("CREATE TABLE changed (value INTEGER)")
 
     completed = run_cli(
         tmp_path,

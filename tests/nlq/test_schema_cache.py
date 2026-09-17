@@ -46,7 +46,7 @@ def test_cache_reuses_identical_context(cache_inputs):
         ("database_sha256", "database-sha-2"),
         ("schema_git_commit", "commit-b"),
         ("dictionary_sha256", "dictionary-sha-2"),
-        ("renderer_version", "2"),
+        ("renderer_version", "3"),
     ],
 )
 def test_cache_misses_when_key_metadata_changes(cache_inputs, changed_field: str, value: str):
@@ -66,18 +66,18 @@ def test_cache_misses_when_key_metadata_changes(cache_inputs, changed_field: str
 
 
 def test_build_verifies_manifest_and_caches_full_build(
-    analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
+    duckdb_analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
 ):
     database = tmp_path / "snapshot.db"
-    database.write_bytes(analytical_database.read_bytes())
+    database.write_bytes(duckdb_analytical_database.read_bytes())
+    source_database = tmp_path / "source.db"
+    source_database.write_bytes(b"source")
     manifest = create_manifest(
         dataset_id="test-dataset",
         database=database,
+        source_database=source_database,
         manifest_database_path="snapshot.db",
         schema_git_commit="abc123",
-        run_count=1,
-        earliest_run_date="2026-07-01",
-        latest_run_date="2026-08-01",
         created_at="2026-08-10T00:00:00+00:00",
     )
     manifest_path = tmp_path / "manifest.json"
@@ -109,28 +109,26 @@ def test_build_verifies_manifest_and_caches_full_build(
 
 
 def test_build_does_not_share_contexts_between_datasets(
-    analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
+    duckdb_analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
 ):
     database = tmp_path / "snapshot.db"
-    database.write_bytes(analytical_database.read_bytes())
+    database.write_bytes(duckdb_analytical_database.read_bytes())
+    source_database = tmp_path / "source.db"
+    source_database.write_bytes(b"source")
     first_manifest = create_manifest(
         dataset_id="first-dataset",
         database=database,
+        source_database=source_database,
         manifest_database_path="snapshot.db",
         schema_git_commit="abc123",
-        run_count=1,
-        earliest_run_date="2026-07-01",
-        latest_run_date="2026-08-01",
         created_at="2026-08-10T00:00:00+00:00",
     )
     second_manifest = create_manifest(
         dataset_id="second-dataset",
         database=database,
+        source_database=source_database,
         manifest_database_path="snapshot.db",
         schema_git_commit="abc123",
-        run_count=1,
-        earliest_run_date="2026-07-01",
-        latest_run_date="2026-08-01",
         created_at="2026-08-10T00:00:00+00:00",
     )
     first_manifest_path = tmp_path / "first-manifest.json"

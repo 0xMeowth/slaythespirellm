@@ -1,11 +1,11 @@
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 import traceback
 from pathlib import Path
 
+import duckdb
 import pytest
 from langchain_core.messages import AIMessage
 
@@ -28,15 +28,15 @@ def valid_environment():
 
 
 @pytest.fixture
-def cli_fixture(analytical_database: Path, project_root: Path, tmp_path: Path):
+def cli_fixture(duckdb_analytical_database: Path, project_root: Path, tmp_path: Path):
+    source_database = tmp_path / "source.db"
+    source_database.write_bytes(b"source")
     manifest = create_manifest(
         dataset_id="test-dataset",
-        database=analytical_database,
-        manifest_database_path="analytical.db",
+        database=duckdb_analytical_database,
+        source_database=source_database,
+        manifest_database_path="analytical.duckdb",
         schema_git_commit="abc123",
-        run_count=1,
-        earliest_run_date="2026-07-01",
-        latest_run_date="2026-08-01",
         created_at="2026-08-10T00:00:00+00:00",
     )
     manifest_path = tmp_path / "manifest.json"
@@ -106,7 +106,9 @@ def test_schema_check_reports_dictionary_mismatch_without_traceback(cli_fixture)
 
 
 def test_schema_check_reports_manifest_mismatch_without_traceback(cli_fixture):
-    with sqlite3.connect(cli_fixture.working_directory / "analytical.db") as connection:
+    with duckdb.connect(
+        str(cli_fixture.working_directory / "analytical.duckdb")
+    ) as connection:
         connection.execute("CREATE TABLE changed (value TEXT)")
 
     completed = run_nlq_cli(
@@ -125,7 +127,9 @@ def test_schema_check_reports_manifest_mismatch_without_traceback(cli_fixture):
 
 
 def test_schema_check_debug_reraises_with_traceback(cli_fixture):
-    with sqlite3.connect(cli_fixture.working_directory / "analytical.db") as connection:
+    with duckdb.connect(
+        str(cli_fixture.working_directory / "analytical.duckdb")
+    ) as connection:
         connection.execute("CREATE TABLE changed (value TEXT)")
 
     completed = run_nlq_cli(

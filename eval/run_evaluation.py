@@ -23,7 +23,7 @@ from eval.models import (
     TagMetrics,
     TrialRecord,
 )
-from eval.sqlite_eval import QueryExecutionError, execute_query
+from eval.query_execution import QueryExecutionError, execute_query
 
 logger = logging.getLogger(__name__)
 

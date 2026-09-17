@@ -22,6 +22,11 @@
 - Test fixtures and the automated suite must not download extensions or use the network.
 - Never modify the frozen SQLite source or publish a partially verified DuckDB target.
 - Stop after every task for human review before committing or continuing.
+- Tasks 3–5 are vertical slices: the DuckDB manifest, schema context, and offline
+  evaluator; guarded LangGraph execution; then snapshot publication and acceptance.
+- Run focused tests while building each slice, then require the full suite once at
+  the end of that complete slice. Do not add temporary SQLite compatibility code
+  solely to keep intermediate partial slices green.
 
 ---
 
@@ -266,7 +271,7 @@ Stop for review before committing.
 
 ---
 
-### Task 3: DuckDB Manifest Metadata and Verification
+### Task 3: DuckDB Manifest, Schema Context, and Offline Evaluator
 
 **Files:**
 - Modify: `eval/models.py`
@@ -274,13 +279,30 @@ Stop for review before committing.
 - Modify: `eval/__main__.py`
 - Modify: `tests/eval/test_manifest.py`
 - Modify: `tests/eval/test_cli.py`
+- Modify: `nlq/schema_context.py`
+- Modify: `tests/nlq/conftest.py`
+- Modify: `tests/nlq/test_schema_context.py`
+- Modify: `tests/nlq/test_schema_cache.py`
+- Create: `eval/query_execution.py`
+- Delete: `eval/sqlite_eval.py`
+- Modify: `eval/run_evaluation.py`
+- Create: `tests/eval/test_query_execution.py`
+- Delete: `tests/eval/test_sqlite_eval.py`
+- Modify: `tests/eval/conftest.py`
+- Modify: `tests/eval/test_run_evaluation.py`
 
 **Interfaces:**
 - Consumes: verified DuckDB path and frozen SQLite source path.
 - Produces: `DatasetManifest` with `engine`, `engine_version`, and `source_database_sha256`.
 - Produces: `verify_manifest(manifest, project_root) -> Path` that validates DuckDB metadata and approved tables.
+- Consumes: verified DuckDB path, `SchemaDictionary`, and `DatasetManifest`.
+- Produces: `inspect_approved_schema(database: Path) -> DatabaseSchema` using DuckDB metadata.
+- Preserves: `build_verified_schema_context(...) -> SchemaContext` and its cache behavior.
+- Consumes: DuckDB path, gold or predicted SQL, timeout seconds.
+- Produces: `execute_query(database: Path, sql: str, timeout_seconds: float) -> QueryResult`.
+- Preserves: comparison modes, trial scoring, case-level scoring, tags, and report structure.
 
-- [ ] **Step 1: Write failing manifest tests**
+- [x] **Step 1: Write failing manifest tests**
 
 Add tests for the required fields and rejection cases:
 
@@ -306,13 +328,13 @@ def test_verify_manifest_rejects_missing_approved_table(tmp_path): ...
 def test_verify_manifest_rejects_run_count_mismatch(tmp_path): ...
 ```
 
-- [ ] **Step 2: Run manifest tests and confirm failure**
+- [x] **Step 2: Run manifest tests and confirm failure**
 
 Run: `uv run pytest tests/eval/test_manifest.py tests/eval/test_cli.py -q`
 
 Expected: failures because the manifest model lacks DuckDB metadata.
 
-- [ ] **Step 3: Extend the manifest model**
+- [x] **Step 3: Extend the manifest model**
 
 Use this field shape:
 
@@ -334,43 +356,17 @@ class DatasetManifest:
 
 `create_manifest` calculates both file checksums, reads `duckdb.__version__`, and inspects count/date coverage through a read-only DuckDB connection. `load_manifest` rejects unknown or missing fields. `verify_manifest` checks engine equals `duckdb`, version equals the running DuckDB version, checksum, run count, and all six approved tables.
 
-- [ ] **Step 4: Update CLI arguments**
+- [x] **Step 4: Update CLI arguments**
 
 The manifest command accepts `--source-database` in addition to `--database`. It continues to require a project-relative manifest database path so the checked-in manifest points at the symlink rather than an absolute machine-specific SSD path.
 
-- [ ] **Step 5: Run focused and full tests**
+- [x] **Step 5: Run focused manifest tests**
 
 Run: `uv run pytest tests/eval/test_manifest.py tests/eval/test_cli.py -q`
 
 Expected: all manifest tests pass.
 
-Run: `uv run pytest -q`
-
-Expected: the complete suite passes.
-
-- [ ] **Step 6: Review and commit**
-
-Proposed commit: `feat: verify DuckDB evaluation manifests`
-
-Stop for review before committing.
-
----
-
-### Task 4: DuckDB Schema Context
-
-**Files:**
-- Modify: `nlq/schema_context.py`
-- Modify: `tests/nlq/conftest.py`
-- Modify: `tests/nlq/test_schema_context.py`
-- Modify: `tests/nlq/test_schema_cache.py`
-- Modify: `tests/nlq/test_cli.py`
-
-**Interfaces:**
-- Consumes: verified DuckDB path, `SchemaDictionary`, and `DatasetManifest`.
-- Produces: `inspect_approved_schema(database: Path) -> DatabaseSchema` using DuckDB metadata.
-- Preserves: `build_verified_schema_context(...) -> SchemaContext` and its cache behavior.
-
-- [ ] **Step 1: Convert fixtures and write failing metadata tests**
+- [x] **Step 6: Convert fixtures and write failing metadata tests**
 
 Create small native DuckDB fixtures and assert engine-neutral metadata:
 
@@ -386,13 +382,13 @@ def test_preserves_live_duckdb_column_metadata(analytical_database):
 
 Keep tests proving only `APPROVED_TABLES` appear, table order is stable, dictionary names match, and repeated builds hit the in-memory cache.
 
-- [ ] **Step 2: Run schema tests and confirm failure**
+- [x] **Step 7: Run schema tests and confirm failure**
 
 Run: `uv run pytest tests/nlq/test_schema_context.py tests/nlq/test_schema_cache.py tests/nlq/test_cli.py -q`
 
 Expected: failures from SQLite-only inspection and `sqlite_type`.
 
-- [ ] **Step 3: Replace SQLite metadata inspection**
+- [x] **Step 8: Replace SQLite metadata inspection**
 
 Rename the column field:
 
@@ -409,36 +405,83 @@ Open DuckDB read-only and inspect each approved table using `duckdb_columns()` o
 
 Update prompt metadata from SQLite wording to DuckDB wording while preserving the reviewed dictionary descriptions and cache key inputs.
 
-- [ ] **Step 4: Run focused and full tests**
+- [x] **Step 9: Run focused schema-context tests**
 
 Run: `uv run pytest tests/nlq/test_schema_context.py tests/nlq/test_schema_cache.py tests/nlq/test_cli.py -q`
 
 Expected: all schema-context tests pass.
 
+- [x] **Step 10: Write failing DuckDB evaluation tests**
+
+Port the executor tests to a native temporary DuckDB database:
+
+```python
+def test_executes_query_read_only(sample_database):
+    result = execute_query(sample_database, "SELECT COUNT(*) FROM runs", 1.0)
+    assert result == QueryResult(column_count=1, rows=((3,),))
+
+
+def test_reports_invalid_sql(sample_database): ...
+
+
+def test_rejects_writes_in_read_only_mode(sample_database): ...
+
+
+def test_interrupts_query_after_timeout(sample_database): ...
+```
+
+Update evaluation tests so gold and predicted SQL both execute through the same DuckDB function.
+
+- [x] **Step 11: Run evaluation tests and confirm failure**
+
+Run: `uv run pytest tests/eval -q`
+
+Expected: failures until the engine-neutral module replaces `sqlite_eval`.
+
+- [x] **Step 12: Replace the SQLite-specific evaluator boundary**
+
+Move `QueryExecutionError` and `execute_query` to `eval/query_execution.py`. Use read-only DuckDB and the same timer/interruption pattern as runtime execution, but return every row because deterministic scoring must compare complete results.
+
+Change imports in `eval/run_evaluation.py` and `eval/__main__.py`. Preserve `GoldQueryError`: broken gold SQL remains an eval-data defect, while broken predicted SQL remains a failed trial.
+
+- [x] **Step 13: Run focused and full vertical-slice tests**
+
+Run: `uv run pytest tests/eval tests/nlq/test_schema_context.py tests/nlq/test_schema_cache.py tests/nlq/test_cli.py -q`
+
+Expected: all manifest, schema-context, and evaluator tests pass.
+
 Run: `uv run pytest -q`
 
 Expected: the complete suite passes.
 
-- [ ] **Step 5: Review and commit**
+- [ ] **Step 14: Review and commit**
 
-Proposed commit: `feat: render schema context from DuckDB`
+Proposed commit: `feat: move evaluation foundation to DuckDB`
 
 Stop for review before committing.
 
 ---
 
-### Task 5: DuckDB SQL Policy and Restricted Executor
+### Task 4: DuckDB Guardrails and LangGraph
 
 **Files:**
 - Modify: `nlq/sql_policy.py`
 - Modify: `nlq/sql_executor.py`
 - Modify: `tests/nlq/test_sql_policy.py`
 - Modify: `tests/nlq/test_sql_executor.py`
+- Modify: `nlq/text_to_sql_graph.py`
+- Modify: `nlq/studio_graph.py`
+- Modify: `tests/nlq/test_text_to_sql_graph.py`
+- Modify: `tests/nlq/test_studio_graph.py`
+- Modify: `tests/nlq/test_text_to_sql_model_output.py` only if prompt assertions live there
 
 **Interfaces:**
 - Consumes: untrusted generated SQL, DuckDB path, and `ExecutionLimits`.
 - Produces: `validate_sql(sql) -> ValidatedSql` parsed with `read="duckdb"`.
 - Produces: `guard_and_execute_sql(...) -> SqlExecutionResult` through a fresh hardened DuckDB connection.
+- Consumes: `PipelineSettings` DuckDB fields and the verified DuckDB manifest path.
+- Produces: the same `CompiledStateGraph` and `TextToSqlRunResult` interfaces as Phase 3d.
+- Preserves: route, generate, validate, execute, retry, and finish nodes and edges.
 
 - [ ] **Step 1: Write failing DuckDB policy tests**
 
@@ -509,108 +552,13 @@ connection.execute("SET lock_configuration = true")
 
 Use `threading.Timer` to set a local timeout flag and call `connection.interrupt()`. Classify an interrupted query as `timeout` only when that timer fired; classify other `duckdb.Error` values as `execution_error`. Cancel and join the timer in `finally`, preserve row/byte limits, close the connection, and keep logs free of raw SQL.
 
-- [ ] **Step 5: Run focused and full tests**
+- [ ] **Step 5: Run focused guardrail tests**
 
 Run: `uv run pytest tests/nlq/test_sql_policy.py tests/nlq/test_sql_executor.py -q`
 
 Expected: policy, security, timeout, result-limit, and logging tests pass.
 
-Run: `uv run pytest -q`
-
-Expected: the complete suite passes.
-
-- [ ] **Step 6: Review and commit**
-
-Proposed commit: `feat: restrict and execute generated SQL in DuckDB`
-
-Stop for review before committing.
-
----
-
-### Task 6: Engine-Neutral Offline Evaluation
-
-**Files:**
-- Create: `eval/query_execution.py`
-- Delete: `eval/sqlite_eval.py`
-- Modify: `eval/run_evaluation.py`
-- Modify: `eval/__main__.py`
-- Create: `tests/eval/test_query_execution.py`
-- Delete: `tests/eval/test_sqlite_eval.py`
-- Modify: `tests/eval/conftest.py`
-- Modify: `tests/eval/test_run_evaluation.py`
-- Modify: `tests/eval/test_cli.py`
-
-**Interfaces:**
-- Consumes: DuckDB path, gold or predicted SQL, timeout seconds.
-- Produces: `execute_query(database: Path, sql: str, timeout_seconds: float) -> QueryResult`.
-- Preserves: comparison modes, trial scoring, case-level scoring, tags, and report structure.
-
-- [ ] **Step 1: Write failing DuckDB evaluation tests**
-
-Port the executor tests to a native temporary DuckDB database:
-
-```python
-def test_executes_query_read_only(sample_database):
-    result = execute_query(sample_database, "SELECT COUNT(*) FROM runs", 1.0)
-    assert result == QueryResult(column_count=1, rows=((3,),))
-
-
-def test_reports_invalid_sql(sample_database): ...
-
-
-def test_rejects_writes_in_read_only_mode(sample_database): ...
-
-
-def test_interrupts_query_after_timeout(sample_database): ...
-```
-
-Update evaluation tests so gold and predicted SQL both execute through the same DuckDB function.
-
-- [ ] **Step 2: Run evaluation tests and confirm failure**
-
-Run: `uv run pytest tests/eval -q`
-
-Expected: failures until the engine-neutral module replaces `sqlite_eval`.
-
-- [ ] **Step 3: Replace the SQLite-specific boundary**
-
-Move `QueryExecutionError` and `execute_query` to `eval/query_execution.py`. Use read-only DuckDB and the same timer/interruption pattern as runtime execution, but return every row because deterministic scoring must compare complete results.
-
-Change imports in `eval/run_evaluation.py` and `eval/__main__.py`. Preserve `GoldQueryError`: broken gold SQL remains an eval-data defect, while broken predicted SQL remains a failed trial.
-
-- [ ] **Step 4: Run focused and full tests**
-
-Run: `uv run pytest tests/eval -q`
-
-Expected: all evaluator tests pass.
-
-Run: `uv run pytest -q`
-
-Expected: the complete suite passes.
-
-- [ ] **Step 5: Review and commit**
-
-Proposed commit: `refactor: run offline evaluation against DuckDB`
-
-Stop for review before committing.
-
----
-
-### Task 7: LangGraph and Studio DuckDB Integration
-
-**Files:**
-- Modify: `nlq/text_to_sql_graph.py`
-- Modify: `nlq/studio_graph.py`
-- Modify: `tests/nlq/test_text_to_sql_graph.py`
-- Modify: `tests/nlq/test_studio_graph.py`
-- Modify: `tests/nlq/test_text_to_sql_model_output.py` only if prompt assertions live there
-
-**Interfaces:**
-- Consumes: `PipelineSettings` DuckDB fields and the verified DuckDB manifest path.
-- Produces: the same `CompiledStateGraph` and `TextToSqlRunResult` interfaces as Phase 3d.
-- Preserves: route, generate, validate, execute, retry, and finish nodes and edges.
-
-- [ ] **Step 1: Write failing prompt and dependency-injection tests**
+- [ ] **Step 6: Write failing prompt and dependency-injection tests**
 
 Assert the generator requests DuckDB SQL and Studio passes all resource settings:
 
@@ -628,13 +576,13 @@ def test_studio_graph_injects_duckdb_limits(monkeypatch, tmp_path):
     assert captured_limits.timeout_seconds == 10.0
 ```
 
-- [ ] **Step 2: Run graph tests and confirm failure**
+- [ ] **Step 7: Run graph tests and confirm failure**
 
 Run: `uv run pytest tests/nlq/test_text_to_sql_graph.py tests/nlq/test_studio_graph.py -q`
 
 Expected: prompt and settings assertions fail against the SQLite configuration.
 
-- [ ] **Step 3: Update prompts and injected limits**
+- [ ] **Step 8: Update prompts and injected limits**
 
 Change model-facing wording to:
 
@@ -648,25 +596,25 @@ SQL_SYSTEM_PROMPT = """Return exactly one read-only DuckDB SELECT query and no e
 
 `studio_graph.py` resolves the DuckDB path from the verified manifest and creates `ExecutionLimits` with timeout, memory, and thread settings. Do not add new graph nodes or change retry behavior.
 
-- [ ] **Step 4: Run focused and full tests**
+- [ ] **Step 9: Run focused and full vertical-slice tests**
 
-Run: `uv run pytest tests/nlq/test_text_to_sql_graph.py tests/nlq/test_studio_graph.py -q`
+Run: `uv run pytest tests/nlq/test_sql_policy.py tests/nlq/test_sql_executor.py tests/nlq/test_text_to_sql_graph.py tests/nlq/test_studio_graph.py -q`
 
-Expected: all graph tests pass with fake models.
+Expected: all guardrail and graph tests pass with fake models.
 
 Run: `uv run pytest -q`
 
 Expected: the complete suite passes.
 
-- [ ] **Step 5: Review and commit**
+- [ ] **Step 10: Review and commit**
 
-Proposed commit: `feat: connect LangGraph pipeline to DuckDB`
+Proposed commit: `feat: connect guarded LangGraph pipeline to DuckDB`
 
 Stop for review before committing.
 
 ---
 
-### Task 8: Publish the Frozen Snapshot and Verify Acceptance
+### Task 5: Publish the Frozen Snapshot and Verify Acceptance
 
 **Files:**
 - Modify: `eval/datasets/manifest.json`

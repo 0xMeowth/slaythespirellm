@@ -1,10 +1,10 @@
 import hashlib
 import os
-import sqlite3
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 
+import duckdb
 import pytest
 
 from nlq.schema_context import (
@@ -23,8 +23,8 @@ from nlq.schema_dictionary import (
 )
 
 
-def test_inspects_only_approved_tables(analytical_database: Path):
-    schema = inspect_approved_schema(analytical_database)
+def test_inspects_only_approved_tables(duckdb_analytical_database: Path):
+    schema = inspect_approved_schema(duckdb_analytical_database)
 
     assert tuple(table.name for table in schema.tables) == APPROVED_TABLES
     assert {table.name for table in schema.tables}.isdisjoint(
@@ -32,8 +32,8 @@ def test_inspects_only_approved_tables(analytical_database: Path):
     )
 
 
-def test_preserves_live_sqlite_column_metadata(analytical_database: Path):
-    schema = inspect_approved_schema(analytical_database)
+def test_preserves_live_duckdb_column_metadata(duckdb_analytical_database: Path):
+    schema = inspect_approved_schema(duckdb_analytical_database)
     runs = schema.tables[0]
 
     assert tuple(column.name for column in runs.columns[:4]) == (
@@ -42,28 +42,28 @@ def test_preserves_live_sqlite_column_metadata(analytical_database: Path):
         "win",
         "was_abandoned",
     )
-    assert runs.columns[0].sqlite_type == "TEXT"
+    assert runs.columns[0].database_type == "VARCHAR"
     assert runs.columns[0].primary_key is True
     assert runs.columns[1].nullable is False
 
 
-def test_inspection_works_for_read_only_database(analytical_database: Path):
-    os.chmod(analytical_database, 0o444)
+def test_inspection_works_for_read_only_database(duckdb_analytical_database: Path):
+    os.chmod(duckdb_analytical_database, 0o444)
 
     try:
-        schema = inspect_approved_schema(analytical_database)
+        schema = inspect_approved_schema(duckdb_analytical_database)
     finally:
-        os.chmod(analytical_database, 0o644)
+        os.chmod(duckdb_analytical_database, 0o644)
 
     assert schema.tables[0].name == "runs"
 
 
-def test_rejects_missing_approved_table(analytical_database: Path):
-    with sqlite3.connect(analytical_database) as connection:
+def test_rejects_missing_approved_table(duckdb_analytical_database: Path):
+    with duckdb.connect(str(duckdb_analytical_database)) as connection:
         connection.execute("DROP TABLE relics")
 
     with pytest.raises(ValueError, match="missing approved table: relics"):
-        inspect_approved_schema(analytical_database)
+        inspect_approved_schema(duckdb_analytical_database)
 
 
 def test_rejects_missing_dictionary_table(schema: DatabaseSchema, dictionary: SchemaDictionary):
@@ -231,8 +231,8 @@ def test_rejects_join_with_unknown_column(schema: DatabaseSchema, dictionary: Sc
 
 
 @pytest.fixture
-def schema(analytical_database: Path) -> DatabaseSchema:
-    return inspect_approved_schema(analytical_database)
+def schema(duckdb_analytical_database: Path) -> DatabaseSchema:
+    return inspect_approved_schema(duckdb_analytical_database)
 
 
 def test_render_is_stable(schema: DatabaseSchema, dictionary: SchemaDictionary, manifest):
@@ -264,8 +264,8 @@ def test_render_uses_live_columns_and_dictionary_metadata(
     context = render_schema_context(schema, dictionary, manifest)
 
     assert context.text.index("Table: runs") < context.text.index("Table: run_cards")
-    assert context.text.index("run_id | TEXT | nullable | primary key") < context.text.index(
-        "character | TEXT | not null"
+    assert context.text.index("run_id | VARCHAR | not null | primary key") < context.text.index(
+        "character | VARCHAR | not null"
     )
     assert "Whether the run was won." in context.text
     assert "Values: 0 = loss; 1 = victory" in context.text
@@ -275,9 +275,12 @@ def test_render_uses_live_columns_and_dictionary_metadata(
 
 
 def test_render_does_not_include_database_rows(
-    analytical_database: Path, schema: DatabaseSchema, dictionary: SchemaDictionary, manifest
+    duckdb_analytical_database: Path,
+    schema: DatabaseSchema,
+    dictionary: SchemaDictionary,
+    manifest,
 ):
-    with sqlite3.connect(analytical_database) as connection:
+    with duckdb.connect(str(duckdb_analytical_database)) as connection:
         connection.execute(
             "INSERT INTO runs (run_id, character, win, was_abandoned, ascension) "
             "VALUES ('secret-run', 'SILENT', 1, 0, 0)"

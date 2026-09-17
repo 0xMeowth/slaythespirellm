@@ -2,6 +2,7 @@ import json
 import logging
 from dataclasses import replace
 
+import duckdb
 import pytest
 
 from eval.models import (
@@ -386,11 +387,14 @@ def test_run_validates_gold_before_predictor(sample_database):
 def sample_manifest():
     return DatasetManifest(
         dataset_id="test-dataset",
+        engine="duckdb",
+        engine_version=duckdb.__version__,
         database="sample.db",
         created_at="2026-08-08T00:00:00+00:00",
         earliest_run_date="2026-06-01",
         latest_run_date="2026-07-29",
         run_count=3,
         database_sha256="database-hash",
+        source_database_sha256="source-database-hash",
         schema_git_commit="abc123",
     )
