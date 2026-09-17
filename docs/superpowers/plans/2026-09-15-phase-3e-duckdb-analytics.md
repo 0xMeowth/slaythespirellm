@@ -628,7 +628,7 @@ Stop for review before committing.
 - Consumes: frozen SQLite snapshot with checksum `0dbc74b8908636de7fb6fa12d0753d6666df61001f175ca3a96a151b78251fb3`.
 - Produces: official frozen DuckDB snapshot, symlink, checked-in manifest, and acceptance evidence.
 
-- [ ] **Step 1: Verify the source before migration**
+- [x] **Step 1: Verify the source before migration**
 
 Run:
 
@@ -638,13 +638,13 @@ uv run python -m eval manifest verify --manifest eval/datasets/manifest.json
 
 Expected: dataset `sts2-2026-07-29` verifies against the frozen SQLite source before the manifest is replaced.
 
-- [ ] **Step 2: Create the official DuckDB snapshot**
+- [x] **Step 2: Create the official DuckDB snapshot**
 
 Run the Task 2 command with the external SSD target. This step may install the official DuckDB SQLite extension in the trusted maintenance process and therefore requires explicit network/filesystem approval if the extension is not already cached.
 
 Expected row counts must equal the SQLite source for all six tables. Do not overwrite an existing official target; use a new temporary target and publish only after verification.
 
-- [ ] **Step 3: Create and verify the DuckDB manifest**
+- [x] **Step 3: Create and verify the DuckDB manifest**
 
 Run:
 
@@ -662,7 +662,7 @@ uv run python -m eval manifest verify \
 
 Expected: engine, version, both checksums, six tables, run count, and date range verify.
 
-- [ ] **Step 4: Validate all development gold SQL**
+- [x] **Step 4: Validate all development gold SQL**
 
 Run:
 
@@ -675,19 +675,19 @@ uv run python -m eval cases validate \
 
 Expected: all SQL cases execute successfully and router-only cases are counted without SQL execution. Replace `CAST(win AS REAL)` with `CAST(win AS DOUBLE)` only where DuckDB semantics require it; expected values must remain equivalent.
 
-- [ ] **Step 5: Re-run Q1–Q8 under application limits**
+- [x] **Step 5: Re-run Q1–Q8 under application limits**
 
 Use native DuckDB with `4GB`, four threads, and a 10-second timeout. Compare complete result hashes with the recorded expected hashes. Record new times only as machine-specific evidence.
 
 Expected: all eight hashes match and every query completes within 10 seconds.
 
-- [ ] **Step 6: Run automated acceptance tests**
+- [x] **Step 6: Run automated acceptance tests**
 
 Run: `uv run pytest -q`
 
 Expected: the complete suite passes without network access.
 
-- [ ] **Step 7: Run Studio acceptance checks**
+- [x] **Step 7: Run Studio acceptance checks**
 
 Start `uv run langgraph dev`, then verify:
 
@@ -695,7 +695,12 @@ Start `uv run langgraph dev`, then verify:
 2. A strategy question follows route → decline and never executes DuckDB.
 3. The rendered graph topology is unchanged.
 
-- [ ] **Step 8: Update roadmap and review the final diff**
+Verified with the configured real model: a statistical question returned `543618`
+through route → generate → validate → execute in one attempt; a strategy question
+returned `status = declined`, no SQL, and no result rows. Automated topology tests
+continue to assert the same graph nodes and edges.
+
+- [x] **Step 8: Update roadmap and review the final diff**
 
 Mark Phase 3d done only if its remaining Studio acceptance criteria are now satisfied. Mark Phase 3e done only after every completion criterion in the spec passes. Keep Phase 3f pending.
 

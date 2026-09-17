@@ -233,6 +233,29 @@ All queries completed below one second. Adopt 4 GB, four threads, and a 10-secon
 timeout as the initial local application limits. These settings bound resources without
 materially changing the earlier performance conclusion.
 
+### Official DuckDB Snapshot Acceptance
+
+On 2026-09-17, the eight fixed queries were run once against the official
+`sts2-2026-07-29` DuckDB snapshot and the previously validated six-table benchmark
+database. Both used fresh read-only connections, a 4 GB memory limit, four threads,
+and a 10-second timeout. Times are machine-specific evidence. Hashes cover the complete
+ordered result using the current evaluator canonicalization.
+
+| Question | Official snapshot | Result SHA-256 | Reference matched? |
+|---|---:|---|---|
+| Q1 | 0.661 s | `462262dcd9f872b1ad61882d3b76500fa443e8dc19183166eadaf333a51efd13` | Yes |
+| Q2 | 0.015 s | `d610f894d653f48fa8dc846e427922458247fd905bff73289ae436272175aebb` | Yes |
+| Q3 | 0.141 s | `4c13d4110cfde27be81eab7abd17f942f21a84ee6bff6da715653f386c3999f2` | Yes |
+| Q4 | 0.010 s | `1dbb20cb9b044c45376deaf08adbb91784065a24f7e88eeec4fed509d5dfa0a9` | Yes |
+| Q5 | 0.577 s | `75c6902dec1f05bbd2da9c355846f3819857e1568bba9a4ea5c5cde375323a0f` | Yes |
+| Q6 | 0.013 s | `a030a367b171669cd4a989ae37ba4fb43d449319b44dff227e70bcd02316d0c6` | Yes |
+| Q7 | 0.126 s | `1c19ed8dfb66ed72cb0c664c40106fc267aa81c7d85cab44f3247cc2847325b4` | Yes |
+| Q8 | 0.103 s | `4e6f47cc797c16079f5a64a8574ebd1e5c33f2c7b242159d89608238f3e09caa` | Yes |
+
+The official snapshot contains the same six table row counts as the frozen SQLite
+source. Its SHA-256 is
+`2c96249f491c7a1c3803228fc37afc2d9ee16795e08ef70a735b7b6a9c06b270`.
+
 ## Benchmark Method
 
 1. Use a disposable or newly versioned snapshot on the external SSD; never modify the

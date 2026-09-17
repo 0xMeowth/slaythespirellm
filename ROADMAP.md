@@ -15,11 +15,11 @@ Talk-to-the-database agent over Slay the Spire 2 community run data
 | 2d Test pull (1k runs) | done | none | 1374 runs; winrate 26.5% matches /runs/stats; cursor resume verified |
 | 2e Full pull | done | none | 659,515 runs (Jun 1–Jul 29); stopped early by choice, cron closes the gap |
 | 2f Incremental sync + cron | in-progress | none | cursor resume + sync_log implemented and tested; cron entry pending |
-| 3a Offline evaluation | done | none | compact frozen snapshot; 10 development cases; deterministic scoring/reports; 65 tests; held-out split awaits expansion to 40 cases |
+| 3a Offline evaluation | done | none | 10 development cases; deterministic scoring/reports; frozen DuckDB snapshot; held-out split awaits expansion to 40 cases |
 | 3b Model + schema context | done | none | 204 automated tests pass; schema context SHA-256 `3cdf1bb425f7cdad4a7d19611ac754a1b0196066acf559d84ce4abf622f95d45`; live check passed with `sea_lion` model `aisingapore/Qwen-SEA-LION-v4.5-27B-IT` |
-| 3c SQL guardrails | done | none | SQLGlot policy + SQLite authorizer; read-only execution, timeout, row/byte limits, adversarial matrix; 310 tests |
-| 3d LangGraph pipeline | pending | none | explicit StateGraph; router → generate → validate → execute → retry; required Studio walkthrough with the configured real model |
-| 3e Frozen DuckDB analytics | pending | none | migrate six analytical tables; adapt query/eval boundaries; ADR 001 accepted |
+| 3c SQL guardrails | done | none | SQLGlot policy + hardened read-only DuckDB execution; timeout, memory/thread, row/byte limits; adversarial matrix |
+| 3d LangGraph pipeline | done | none | explicit StateGraph; router → generate → validate → execute → retry; real-model Studio acceptance passed |
+| 3e Frozen DuckDB analytics | done | none | verified six-table snapshot; Q1–Q8 hashes match; 388 tests pass; ADR 001 implemented |
 | 3f End-to-end baseline eval | pending | none | connect the real-model LangGraph pipeline to the offline evaluator; 3 independent trials per case |
 | 3g Answer synthesis | pending | none | result rows → natural-language answer; show SQL |
 | 3h Langfuse observability | pending | none | traces, spans, scores, datasets, experiment comparisons |
@@ -78,7 +78,7 @@ Graph flow:
 ### Build Order
 
 - **3a Offline evaluation**: implement the approved evaluation specification. Freeze and
-  identify the SQLite snapshot, create the initial development cases with verified gold
+  identify the analytical snapshot, create the initial development cases with verified gold
   SQL, and build the deterministic comparator, report format, and fixture-based tests.
   This stage proves scoring without requiring an LLM.
 - **3b Model + schema context**: configure LangChain against an OpenAI-compatible
@@ -86,8 +86,8 @@ Graph flow:
   schema context; omit raw_runs, sync_state, and sync_log. Include concise column and
   domain descriptions plus reviewed targeted values.
 - **3c SQL guardrails**: use sqlglot to require one parseable SELECT statement and
-  enforce a table allowlist. Execute only through SQLite's read-only connection with
-  a query timeout and result-row cap.
+  enforce table and function allowlists. Execute only through a hardened read-only
+  DuckDB connection with query, resource, and result limits.
 - **3d LangGraph pipeline**: define typed per-question state containing question,
   route, SQL, safe error, attempt count, rows, and status. Add explicit `StateGraph`
   nodes for routing, generation, validation, execution, and retry control. Use fake
@@ -162,7 +162,7 @@ Graph flow:
 
 - Query-performance evidence and remaining optimization hypotheses are tracked in
   `docs/query-performance-benchmarks.md`. ADR 001 adopts native DuckDB for the six
-  analytical tables; the implementation remains pending in stage 3e.
+  analytical tables; stage 3e implements and verifies that decision.
 - After the LangChain/LangGraph baseline is measured, DSPy may optimize the SQL
   generator's instructions and few-shot examples against execution accuracy. DSPy is
   an offline optimizer for that node; it does not replace LangGraph, SQL guardrails, or
@@ -178,7 +178,7 @@ Graph flow:
 2. Treat the user's question as input data, not pipeline instructions.
 3. sqlglot parsing, one-statement enforcement, and SELECT-only validation.
 4. Deterministic table allowlist shared by schema rendering and validation.
-5. Read-only SQLite connection, execution timeout, and output row cap.
+5. Hardened read-only DuckDB connection with execution and output limits.
 6. Maximum three attempts, followed by an explicit failure response.
 
 **Verification (phase):** all guardrail tests pass; baseline and improved eval

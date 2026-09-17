@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from eval.manifest import load_manifest
@@ -12,8 +13,8 @@ from nlq.text_to_sql_graph import build_text_to_sql_graph
 PROJECT_ROOT = Path(__file__).parents[1]
 
 
-def create_studio_graph():
-    return _create_studio_graph(PROJECT_ROOT)
+async def create_studio_graph():
+    return await asyncio.to_thread(_create_studio_graph, PROJECT_ROOT)
 
 
 def _create_studio_graph(project_root: Path):

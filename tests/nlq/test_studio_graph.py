@@ -1,4 +1,6 @@
+import asyncio
 import json
+import threading
 from pathlib import Path
 
 import duckdb
@@ -7,6 +9,23 @@ from eval.models import DatasetManifest
 from nlq.pipeline_settings import PipelineSettings
 from nlq import studio_graph
 from nlq.sql_executor import ExecutionLimits
+
+
+def test_studio_entrypoint_builds_graph_off_event_loop(monkeypatch):
+    compiled_graph = object()
+    caller_thread = threading.get_ident()
+    worker_threads = []
+
+    def fake_create(project_root):
+        worker_threads.append(threading.get_ident())
+        return compiled_graph
+
+    monkeypatch.setattr(studio_graph, "_create_studio_graph", fake_create)
+
+    result = asyncio.run(studio_graph.create_studio_graph())
+
+    assert result is compiled_graph
+    assert worker_threads[0] != caller_thread
 
 
 def test_studio_factory_builds_graph_from_project_configuration(

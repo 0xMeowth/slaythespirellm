@@ -1,10 +1,13 @@
 {
   "dataset_id": "sts2-2026-07-29",
-  "database": "data/spire_eval_2026-07-29.db",
-  "created_at": "2026-08-09T11:09:23.084985+00:00",
+  "engine": "duckdb",
+  "engine_version": "1.5.5",
+  "database": "data/spire_eval_2026-07-29.duckdb",
+  "created_at": "2026-09-17T04:09:56.129380+00:00",
   "earliest_run_date": "2026-06-01T03:19:17.754000",
   "latest_run_date": "2026-07-29T17:08:27.136000",
   "run_count": 659515,
-  "database_sha256": "0dbc74b8908636de7fb6fa12d0753d6666df61001f175ca3a96a151b78251fb3",
-  "schema_git_commit": "4d1301bd08adec6bb2155692d877fc53f077fb00"
+  "database_sha256": "2c96249f491c7a1c3803228fc37afc2d9ee16795e08ef70a735b7b6a9c06b270",
+  "source_database_sha256": "0dbc74b8908636de7fb6fa12d0753d6666df61001f175ca3a96a151b78251fb3",
+  "schema_git_commit": "858f1f5466133e6170314f15e12abdac66863cff"
 }
