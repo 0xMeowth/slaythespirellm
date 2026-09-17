@@ -16,12 +16,10 @@ APPROVED_FUNCTIONS = frozenset(
         "AVG",
         "COALESCE",
         "COUNT",
-        "DATE",
-        "DATETIME",
         "DENSE_RANK",
+        "EPOCH",
         "IFNULL",
-        "IIF",
-        "JULIANDAY",
+        "JULIAN",
         "LAG",
         "LEAD",
         "LENGTH",
@@ -39,9 +37,7 @@ APPROVED_FUNCTIONS = frozenset(
         "STRFTIME",
         "SUBSTR",
         "SUM",
-        "TOTAL",
         "TRIM",
-        "UNIXEPOCH",
         "UPPER",
     }
 )
@@ -77,7 +73,7 @@ def validate_sql(
     if len(sql) > max_sql_characters:
         raise SqlGuardrailError("sql_too_long", "SQL exceeds the character limit")
     try:
-        statements = sqlglot.parse(sql, read="sqlite", max_nodes=max_ast_nodes)
+        statements = sqlglot.parse(sql, read="duckdb", max_nodes=max_ast_nodes)
     except ParseError as error:
         if _is_ast_node_limit_error(error):
             raise SqlGuardrailError(
@@ -163,7 +159,7 @@ def _function_name(function: exp.Func) -> str | None:
     if isinstance(function, exp.Anonymous):
         name = function.name.upper()
     else:
-        rendered = function.sql(dialect="sqlite").upper()
+        rendered = function.sql(dialect="duckdb").upper()
         match = _FUNCTION_NAME.match(rendered)
         if match is None:
             return None

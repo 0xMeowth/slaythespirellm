@@ -23,13 +23,13 @@ from nlq.text_to_sql_state import (
 )
 
 
-ROUTER_SYSTEM_PROMPT = """Classify whether the question can be answered from a statistical SQLite database.
+ROUTER_SYSTEM_PROMPT = """Classify whether the question can be answered from the supplied statistical database.
 Return exactly one JSON object with keys route and reason.
 Use route sql for database facts and aggregates.
 Use route decline for strategy, advice, opinion, prediction, off-topic questions, or unavailable data.
 The route value must be sql or decline."""
 
-SQL_SYSTEM_PROMPT = """Return exactly one read-only SQLite SELECT query and no explanation.
+SQL_SYSTEM_PROMPT = """Return exactly one read-only DuckDB SELECT query and no explanation.
 Use only the supplied schema.
 Exclude rows where was_abandoned = 1 from normal run and win-rate analysis unless explicitly requested.
 Never invent tables, columns, functions, or values."""

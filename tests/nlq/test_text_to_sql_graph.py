@@ -1,5 +1,4 @@
-import sqlite3
-
+import duckdb
 import pytest
 from langchain_core.messages import AIMessage
 
@@ -36,7 +35,7 @@ def schema_context(analytical_database, dictionary, manifest) -> SchemaContext:
 def test_runs_sql_route_to_first_attempt_success(
     analytical_database, schema_context
 ):
-    with sqlite3.connect(analytical_database) as connection:
+    with duckdb.connect(str(analytical_database)) as connection:
         connection.execute(
             """
             INSERT INTO runs(run_id, character, win, was_abandoned, ascension)
@@ -135,6 +134,8 @@ def test_router_receives_question_without_schema_and_generator_receives_both(
     assert schema_context.text not in router_prompt
     assert question in generator_prompt
     assert schema_context.text in generator_prompt
+    assert "DuckDB" in generator_prompt
+    assert "SQLite" not in generator_prompt
     for hidden_table in ("raw_runs", "sync_state", "sync_log"):
         assert hidden_table not in router_prompt
         assert hidden_table not in generator_prompt
@@ -227,7 +228,7 @@ def test_retries_sql_rejected_during_execution(
     assert result.attempt_count == 2
     correction_prompt = _request_text(model.requests[2])
     assert "Error category: execution_error" in correction_prompt
-    assert "Error message: SQLite could not execute the query" in correction_prompt
+    assert "Error message: DuckDB could not execute the query" in correction_prompt
 
 
 def test_stops_after_maximum_sql_attempts(analytical_database, schema_context):

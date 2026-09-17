@@ -1,4 +1,3 @@
-import sqlite3
 from pathlib import Path
 
 import duckdb
@@ -14,11 +13,8 @@ def project_root() -> Path:
 
 
 @pytest.fixture
-def analytical_database(tmp_path: Path, project_root: Path) -> Path:
-    database = tmp_path / "analytical.db"
-    with sqlite3.connect(database) as connection:
-        connection.executescript((project_root / "schema.sql").read_text())
-    return database
+def analytical_database(duckdb_analytical_database: Path) -> Path:
+    return duckdb_analytical_database
 
 
 @pytest.fixture
@@ -26,12 +22,20 @@ def duckdb_analytical_database(tmp_path: Path, project_root: Path) -> Path:
     database = tmp_path / "analytical.duckdb"
     with duckdb.connect(str(database)) as connection:
         connection.execute((project_root / "duckdb_analytics_schema.sql").read_text())
+    return database
+
+
+@pytest.fixture
+def duckdb_manifest_database(
+    duckdb_analytical_database: Path,
+) -> Path:
+    with duckdb.connect(str(duckdb_analytical_database)) as connection:
         connection.execute(
             "INSERT INTO runs "
             "(run_id, character, win, was_abandoned, ascension, submitted_at) "
             "VALUES ('fixture-run', 'SILENT', 0, 0, 0, '2026-07-01')"
         )
-    return database
+    return duckdb_analytical_database
 
 
 @pytest.fixture

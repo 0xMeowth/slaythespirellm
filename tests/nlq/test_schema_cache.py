@@ -66,10 +66,10 @@ def test_cache_misses_when_key_metadata_changes(cache_inputs, changed_field: str
 
 
 def test_build_verifies_manifest_and_caches_full_build(
-    duckdb_analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
+    duckdb_manifest_database: Path, project_root: Path, tmp_path: Path, monkeypatch
 ):
     database = tmp_path / "snapshot.db"
-    database.write_bytes(duckdb_analytical_database.read_bytes())
+    database.write_bytes(duckdb_manifest_database.read_bytes())
     source_database = tmp_path / "source.db"
     source_database.write_bytes(b"source")
     manifest = create_manifest(
@@ -109,10 +109,10 @@ def test_build_verifies_manifest_and_caches_full_build(
 
 
 def test_build_does_not_share_contexts_between_datasets(
-    duckdb_analytical_database: Path, project_root: Path, tmp_path: Path, monkeypatch
+    duckdb_manifest_database: Path, project_root: Path, tmp_path: Path, monkeypatch
 ):
     database = tmp_path / "snapshot.db"
-    database.write_bytes(duckdb_analytical_database.read_bytes())
+    database.write_bytes(duckdb_manifest_database.read_bytes())
     source_database = tmp_path / "source.db"
     source_database.write_bytes(b"source")
     first_manifest = create_manifest(

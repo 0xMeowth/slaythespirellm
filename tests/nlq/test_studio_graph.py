@@ -16,8 +16,8 @@ def test_studio_factory_builds_graph_from_project_configuration(
     pipeline_settings = PipelineSettings(
         max_attempts=4,
         query_timeout_seconds=12.5,
-        duckdb_memory_limit="4GB",
-        duckdb_threads=4,
+        duckdb_memory_limit="3GB",
+        duckdb_threads=2,
     )
     model = object()
     schema_context = object()
@@ -98,7 +98,11 @@ def test_studio_factory_builds_graph_from_project_configuration(
         "schema_context": schema_context,
         "database": (tmp_path / "data" / "eval.db").resolve(),
         "max_attempts": 4,
-        "execution_limits": ExecutionLimits(timeout_seconds=12.5),
+        "execution_limits": ExecutionLimits(
+            timeout_seconds=12.5,
+            duckdb_memory_limit="3GB",
+            duckdb_threads=2,
+        ),
     }
 
 

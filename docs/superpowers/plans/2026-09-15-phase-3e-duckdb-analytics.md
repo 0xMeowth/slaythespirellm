@@ -483,7 +483,7 @@ Stop for review before committing.
 - Produces: the same `CompiledStateGraph` and `TextToSqlRunResult` interfaces as Phase 3d.
 - Preserves: route, generate, validate, execute, retry, and finish nodes and edges.
 
-- [ ] **Step 1: Write failing DuckDB policy tests**
+- [x] **Step 1: Write failing DuckDB policy tests**
 
 Retain all existing one-query, SELECT-only, table-allowlist, function-allowlist, CTE, size, and AST tests. Add explicit DuckDB attack cases:
 
@@ -505,19 +505,19 @@ def test_rejects_duckdb_external_operations(sql, category): ...
 
 Add executor tests that inspect current settings through a trusted helper before configuration is locked, then prove generated SQL cannot change settings or access files.
 
-- [ ] **Step 2: Run policy and executor tests and confirm failure**
+- [x] **Step 2: Run policy and executor tests and confirm failure**
 
 Run: `uv run pytest tests/nlq/test_sql_policy.py tests/nlq/test_sql_executor.py -q`
 
 Expected: failures because parsing and execution still target SQLite.
 
-- [ ] **Step 3: Switch SQLGlot to DuckDB**
+- [x] **Step 3: Switch SQLGlot to DuckDB**
 
 Change parser and function rendering to `duckdb`. Remove SQLite-only functions unless DuckDB execution tests prove equivalent behavior. Keep only the minimum reviewed aggregate, scalar, date, string, and window functions needed by the schema and eval cases.
 
 Return the original SQL text in `ValidatedSql`; do not transpile or rewrite model SQL silently.
 
-- [ ] **Step 4: Implement the hardened connection factory**
+- [x] **Step 4: Implement the hardened connection factory**
 
 Extend runtime limits:
 
@@ -552,13 +552,13 @@ connection.execute("SET lock_configuration = true")
 
 Use `threading.Timer` to set a local timeout flag and call `connection.interrupt()`. Classify an interrupted query as `timeout` only when that timer fired; classify other `duckdb.Error` values as `execution_error`. Cancel and join the timer in `finally`, preserve row/byte limits, close the connection, and keep logs free of raw SQL.
 
-- [ ] **Step 5: Run focused guardrail tests**
+- [x] **Step 5: Run focused guardrail tests**
 
 Run: `uv run pytest tests/nlq/test_sql_policy.py tests/nlq/test_sql_executor.py -q`
 
 Expected: policy, security, timeout, result-limit, and logging tests pass.
 
-- [ ] **Step 6: Write failing prompt and dependency-injection tests**
+- [x] **Step 6: Write failing prompt and dependency-injection tests**
 
 Assert the generator requests DuckDB SQL and Studio passes all resource settings:
 
@@ -576,13 +576,13 @@ def test_studio_graph_injects_duckdb_limits(monkeypatch, tmp_path):
     assert captured_limits.timeout_seconds == 10.0
 ```
 
-- [ ] **Step 7: Run graph tests and confirm failure**
+- [x] **Step 7: Run graph tests and confirm failure**
 
 Run: `uv run pytest tests/nlq/test_text_to_sql_graph.py tests/nlq/test_studio_graph.py -q`
 
 Expected: prompt and settings assertions fail against the SQLite configuration.
 
-- [ ] **Step 8: Update prompts and injected limits**
+- [x] **Step 8: Update prompts and injected limits**
 
 Change model-facing wording to:
 
@@ -596,7 +596,7 @@ SQL_SYSTEM_PROMPT = """Return exactly one read-only DuckDB SELECT query and no e
 
 `studio_graph.py` resolves the DuckDB path from the verified manifest and creates `ExecutionLimits` with timeout, memory, and thread settings. Do not add new graph nodes or change retry behavior.
 
-- [ ] **Step 9: Run focused and full vertical-slice tests**
+- [x] **Step 9: Run focused and full vertical-slice tests**
 
 Run: `uv run pytest tests/nlq/test_sql_policy.py tests/nlq/test_sql_executor.py tests/nlq/test_text_to_sql_graph.py tests/nlq/test_studio_graph.py -q`
 

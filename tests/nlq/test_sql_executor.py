@@ -1,12 +1,13 @@
 import hashlib
 import logging
 import math
-import sqlite3
 
+import duckdb
 import pytest
 
 from nlq.sql_executor import (
     ExecutionLimits,
+    _open_restricted_connection,
     execute_validated_sql,
     guard_and_execute_sql,
 )
@@ -27,21 +28,22 @@ def test_executes_approved_read_query(analytical_database):
     "sql",
     [
         "SELECT * FROM raw_runs",
-        "SELECT * FROM sqlite_master",
-        "PRAGMA database_list",
         "DELETE FROM runs",
         "DROP TABLE runs",
-        "ATTACH DATABASE ':memory:' AS other",
-        "SELECT load_extension('x')",
+        "ATTACH ':memory:' AS other",
+        "INSTALL httpfs",
+        "LOAD httpfs",
+        "SET threads = 99",
+        "SELECT * FROM read_csv('/etc/passwd')",
     ],
 )
-def test_authorizer_denies_policy_bypass(analytical_database, sql):
+def test_hardened_connection_rejects_policy_bypass(analytical_database, sql):
     unchecked = ValidatedSql(sql=sql, tables=(), functions=())
 
     with pytest.raises(SqlGuardrailError) as raised:
         execute_validated_sql(analytical_database, unchecked)
 
-    assert raised.value.category == "authorizer_denied"
+    assert raised.value.category == "execution_error"
 
 
 @pytest.mark.parametrize(
@@ -51,7 +53,8 @@ def test_authorizer_denies_policy_bypass(analytical_database, sql):
         {"timeout_seconds": math.inf},
         {"max_result_rows": 0},
         {"max_result_bytes": 0},
-        {"progress_handler_interval": 0},
+        {"duckdb_memory_limit": ""},
+        {"duckdb_threads": 0},
     ],
 )
 def test_rejects_invalid_execution_limits(kwargs):
@@ -60,7 +63,7 @@ def test_rejects_invalid_execution_limits(kwargs):
 
 
 def test_marks_result_truncated_above_row_limit(analytical_database):
-    with sqlite3.connect(analytical_database) as connection:
+    with duckdb.connect(str(analytical_database)) as connection:
         connection.executemany(
             "INSERT INTO cards(card_id, name) VALUES (?, ?)",
             [(f"CARD_{index}", f"Card {index}") for index in range(4)],
@@ -77,7 +80,7 @@ def test_marks_result_truncated_above_row_limit(analytical_database):
 
 
 def test_exact_row_limit_is_not_truncated(analytical_database):
-    with sqlite3.connect(analytical_database) as connection:
+    with duckdb.connect(str(analytical_database)) as connection:
         connection.executemany(
             "INSERT INTO cards(card_id, name) VALUES (?, ?)",
             [(f"CARD_{index}", f"Card {index}") for index in range(3)],
@@ -94,7 +97,7 @@ def test_exact_row_limit_is_not_truncated(analytical_database):
 
 
 def test_rejects_oversized_result(analytical_database):
-    with sqlite3.connect(analytical_database) as connection:
+    with duckdb.connect(str(analytical_database)) as connection:
         connection.execute(
             "INSERT INTO cards(card_id, name) VALUES ('BIG', ?)",
             ("x" * 1_000,),
@@ -111,29 +114,19 @@ def test_rejects_oversized_result(analytical_database):
 
 
 def test_interrupts_query_after_deadline(analytical_database):
-    with sqlite3.connect(analytical_database) as connection:
-        connection.executemany(
-            """
-            INSERT INTO runs(run_id, character, win, was_abandoned, ascension)
-            VALUES (?, 'SILENT', 0, 0, 0)
-            """,
-            [("run-1",), ("run-2",)],
-        )
-
-    ticks = iter([0.0, 2.0, 2.0])
-
     with pytest.raises(SqlGuardrailError) as raised:
         execute_validated_sql(
             analytical_database,
-            validate_sql(
-                "SELECT COUNT(*) FROM runs AS a "
-                "CROSS JOIN runs AS b CROSS JOIN runs AS c"
+            ValidatedSql(
+                sql=(
+                    "SELECT SUM(a.value * b.value) "
+                    "FROM range(1000000000) AS a(value) "
+                    "CROSS JOIN range(1000000000) AS b(value)"
+                ),
+                tables=(),
+                functions=(),
             ),
-            limits=ExecutionLimits(
-                timeout_seconds=1.0,
-                progress_handler_interval=1,
-            ),
-            clock=lambda: next(ticks, 2.0),
+            limits=ExecutionLimits(timeout_seconds=0.001),
         )
 
     assert raised.value.category == "timeout"
@@ -149,7 +142,7 @@ def test_guarded_path_validates_then_executes(analytical_database):
     assert result.rows == ((0,),)
 
 
-def test_guarded_path_rejects_before_sqlite(analytical_database):
+def test_guarded_path_rejects_before_duckdb(analytical_database):
     with pytest.raises(SqlGuardrailError) as raised:
         guard_and_execute_sql(analytical_database, "SELECT * FROM raw_runs")
 
@@ -187,7 +180,7 @@ def test_logs_one_validation_rejection_without_full_sql(
 
 
 def test_logs_one_execution_failure(analytical_database, caplog):
-    with sqlite3.connect(analytical_database) as connection:
+    with duckdb.connect(str(analytical_database)) as connection:
         connection.execute(
             "INSERT INTO cards(card_id, name) VALUES ('BIG', ?)",
             ("x" * 1_000,),
@@ -207,7 +200,7 @@ def test_logs_one_execution_failure(analytical_database, caplog):
     assert records[0].category == "result_too_large"
 
 
-def test_logs_one_authorizer_rejection(analytical_database, caplog, monkeypatch):
+def test_logs_one_runtime_rejection(analytical_database, caplog, monkeypatch):
     unchecked = ValidatedSql(sql="SELECT * FROM raw_runs", tables=(), functions=())
     monkeypatch.setattr("nlq.sql_executor.validate_sql", lambda sql: unchecked)
 
@@ -217,8 +210,31 @@ def test_logs_one_authorizer_rejection(analytical_database, caplog, monkeypatch)
 
     records = _guardrail_records(caplog)
     assert len(records) == 1
-    assert records[0].outcome == "rejected"
-    assert records[0].category == "authorizer_denied"
+    assert records[0].outcome == "failed"
+    assert records[0].category == "execution_error"
+
+
+def test_restricted_connection_applies_and_locks_settings(analytical_database):
+    limits = ExecutionLimits(
+        duckdb_memory_limit="1GB",
+        duckdb_threads=2,
+    )
+
+    with _open_restricted_connection(analytical_database, limits) as connection:
+        settings = connection.execute(
+            "SELECT current_setting('memory_limit'), "
+            "current_setting('threads'), "
+            "current_setting('enable_external_access'), "
+            "current_setting('autoinstall_known_extensions'), "
+            "current_setting('autoload_known_extensions'), "
+            "current_setting('allow_community_extensions'), "
+            "current_setting('allow_unsigned_extensions'), "
+            "current_setting('lock_configuration')"
+        ).fetchone()
+        with pytest.raises(duckdb.Error):
+            connection.execute("SET threads = 3")
+
+    assert settings == ("953.6 MiB", 2, False, False, False, False, False, True)
 
 
 @pytest.mark.parametrize(
@@ -228,12 +244,10 @@ def test_logs_one_authorizer_rejection(analytical_database, caplog, monkeypatch)
         "AVG(win)",
         "COALESCE(game_mode, '')",
         "COUNT(*)",
-        "DATE(start_time, 'unixepoch')",
-        "DATETIME(start_time, 'unixepoch')",
         "DENSE_RANK() OVER (ORDER BY run_time)",
+        "EPOCH(CURRENT_DATE)",
         "IFNULL(game_mode, '')",
-        "IIF(win = 1, 'yes', 'no')",
-        "JULIANDAY('2026-01-01')",
+        "JULIAN(CURRENT_DATE)",
         "LAG(win) OVER (ORDER BY start_time)",
         "LEAD(win) OVER (ORDER BY start_time)",
         "LENGTH(character)",
@@ -247,12 +261,10 @@ def test_logs_one_authorizer_rejection(analytical_database, caplog, monkeypatch)
         "ROUND(AVG(win), 3)",
         "ROW_NUMBER() OVER (ORDER BY run_time)",
         "RTRIM(character)",
-        "STRFTIME('%Y', start_time, 'unixepoch')",
+        "STRFTIME(CURRENT_DATE, '%Y')",
         "SUBSTR(character, 1, 3)",
         "SUM(win)",
-        "TOTAL(win)",
         "TRIM(character)",
-        "UNIXEPOCH('2026-01-01')",
         "UPPER(character)",
     ],
 )

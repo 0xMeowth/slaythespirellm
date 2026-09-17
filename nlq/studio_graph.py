@@ -35,5 +35,7 @@ def _create_studio_graph(project_root: Path):
         max_attempts=pipeline_settings.max_attempts,
         execution_limits=ExecutionLimits(
             timeout_seconds=pipeline_settings.query_timeout_seconds,
+            duckdb_memory_limit=pipeline_settings.duckdb_memory_limit,
+            duckdb_threads=pipeline_settings.duckdb_threads,
         ),
     )

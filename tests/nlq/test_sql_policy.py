@@ -76,7 +76,34 @@ def test_rejects_non_query_or_multiple_statement_sql(sql, category):
 
 
 @pytest.mark.parametrize(
-    "table_name", ["raw_runs", "sync_state", "sync_log", "sqlite_master", "invented"]
+    ("sql", "category"),
+    [
+        ("ATTACH 'other.duckdb' AS other", "non_query_statement"),
+        ("INSTALL httpfs", "non_query_statement"),
+        ("LOAD httpfs", "non_query_statement"),
+        ("COPY runs TO '/tmp/runs.csv'", "non_query_statement"),
+        ("SET memory_limit = '12GB'", "non_query_statement"),
+        ("SELECT * FROM read_csv('/etc/passwd')", "unapproved_table"),
+        ("SELECT * FROM sqlite_scan('x.db', 'runs')", "unapproved_table"),
+    ],
+)
+def test_rejects_duckdb_external_operations(sql, category):
+    with pytest.raises(SqlGuardrailError) as raised:
+        validate_sql(sql)
+
+    assert raised.value.category == category
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "raw_runs",
+        "sync_state",
+        "sync_log",
+        "sqlite_master",
+        "duckdb_tables",
+        "invented",
+    ],
 )
 def test_rejects_unapproved_physical_table(table_name):
     with pytest.raises(SqlGuardrailError, match=table_name) as raised:

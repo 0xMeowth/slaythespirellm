@@ -1,15 +1,15 @@
 import hashlib
 import logging
 import math
-import sqlite3
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event, Timer
 
-from nlq.schema_context import APPROVED_TABLES
+import duckdb
+
 from nlq.sql_policy import (
-    APPROVED_FUNCTIONS,
     SqlGuardrailError,
     ValidatedSql,
     validate_sql,
@@ -19,7 +19,8 @@ from nlq.sql_policy import (
 QUERY_TIMEOUT_SECONDS = 10.0
 MAX_RESULT_ROWS = 200
 MAX_RESULT_BYTES = 1_000_000
-PROGRESS_HANDLER_INTERVAL = 1_000
+DUCKDB_MEMORY_LIMIT = "4GB"
+DUCKDB_THREADS = 4
 LOGGER = logging.getLogger("nlq.sql_guardrail")
 _REJECTION_CATEGORIES = {
     "empty_sql",
@@ -30,7 +31,6 @@ _REJECTION_CATEGORIES = {
     "prohibited_operation",
     "unapproved_table",
     "unapproved_function",
-    "authorizer_denied",
 }
 
 
@@ -39,7 +39,8 @@ class ExecutionLimits:
     timeout_seconds: float = QUERY_TIMEOUT_SECONDS
     max_result_rows: int = MAX_RESULT_ROWS
     max_result_bytes: int = MAX_RESULT_BYTES
-    progress_handler_interval: int = PROGRESS_HANDLER_INTERVAL
+    duckdb_memory_limit: str = DUCKDB_MEMORY_LIMIT
+    duckdb_threads: int = DUCKDB_THREADS
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
@@ -48,20 +49,10 @@ class ExecutionLimits:
             raise ValueError("max_result_rows must be positive")
         if self.max_result_bytes <= 0:
             raise ValueError("max_result_bytes must be positive")
-        if self.progress_handler_interval <= 0:
-            raise ValueError("progress_handler_interval must be positive")
-
-
-@dataclass(frozen=True)
-class AuthorizationDenial:
-    action: int
-    object_name: str | None
-    database_name: str | None
-
-
-@dataclass
-class _AuthorizerState:
-    denial: AuthorizationDenial | None = None
+        if not self.duckdb_memory_limit.strip():
+            raise ValueError("duckdb_memory_limit must be non-empty")
+        if self.duckdb_threads <= 0:
+            raise ValueError("duckdb_threads must be positive")
 
 
 @dataclass(frozen=True)
@@ -129,18 +120,20 @@ def execute_validated_sql(
     clock: Callable[[], float] = time.monotonic,
 ) -> SqlExecutionResult:
     started = clock()
-    deadline = started + limits.timeout_seconds
+    timed_out = Event()
     try:
-        connection, state = _open_restricted_connection(database)
-    except sqlite3.Error:
+        connection = _open_restricted_connection(database, limits)
+    except duckdb.Error:
         raise SqlGuardrailError(
-            "execution_error", "SQLite could not open the database"
+            "execution_error", "DuckDB could not open the database"
         ) from None
+    timer = Timer(
+        limits.timeout_seconds,
+        _interrupt_query,
+        args=(connection, timed_out),
+    )
     try:
-        connection.set_progress_handler(
-            lambda: int(clock() >= deadline),
-            limits.progress_handler_interval,
-        )
+        timer.start()
         cursor = connection.execute(validated_sql.sql)
         columns = tuple(column[0] for column in (cursor.description or ()))
         fetched_rows = cursor.fetchmany(limits.max_result_rows + 1)
@@ -150,17 +143,15 @@ def execute_validated_sql(
             raise SqlGuardrailError(
                 "result_too_large", "SQL result exceeds the byte limit"
             )
-    except sqlite3.Error as error:
-        if state.denial is not None:
-            raise SqlGuardrailError(
-                "authorizer_denied", "SQLite authorizer denied the query"
-            ) from None
-        if str(error).casefold() == "interrupted":
-            raise SqlGuardrailError("timeout", "SQLite query timed out") from None
+    except duckdb.Error:
+        if timed_out.is_set():
+            raise SqlGuardrailError("timeout", "DuckDB query timed out") from None
         raise SqlGuardrailError(
-            "execution_error", "SQLite could not execute the query"
+            "execution_error", "DuckDB could not execute the query"
         ) from None
     finally:
+        timer.cancel()
+        timer.join()
         connection.close()
     return SqlExecutionResult(
         columns=columns,
@@ -172,41 +163,28 @@ def execute_validated_sql(
 
 def _open_restricted_connection(
     database: Path,
-) -> tuple[sqlite3.Connection, _AuthorizerState]:
-    uri = f"{database.resolve().as_uri()}?mode=ro"
-    connection = sqlite3.connect(uri, uri=True)
-    connection.enable_load_extension(False)
-    state = _AuthorizerState()
-    connection.set_authorizer(_build_authorizer(state))
-    return connection, state
+    limits: ExecutionLimits,
+) -> duckdb.DuckDBPyConnection:
+    connection = duckdb.connect(
+        str(database.resolve()),
+        read_only=True,
+        config={
+            "memory_limit": limits.duckdb_memory_limit,
+            "threads": str(limits.duckdb_threads),
+            "enable_external_access": "false",
+            "autoinstall_known_extensions": "false",
+            "autoload_known_extensions": "false",
+            "allow_community_extensions": "false",
+            "allow_unsigned_extensions": "false",
+        },
+    )
+    connection.execute("SET lock_configuration = true")
+    return connection
 
 
-def _build_authorizer(state: _AuthorizerState):
-    approved_tables = {table.casefold() for table in APPROVED_TABLES}
-    approved_functions = {function.casefold() for function in APPROVED_FUNCTIONS}
-
-    def authorize(action, first, second, database, source):
-        allowed = False
-        object_name = first
-        if action == sqlite3.SQLITE_SELECT:
-            allowed = True
-        elif action == sqlite3.SQLITE_READ:
-            allowed = (
-                first is not None
-                and first.casefold() in approved_tables
-                and database in {None, "main"}
-            )
-        elif action == sqlite3.SQLITE_FUNCTION:
-            object_name = second
-            allowed = second is not None and second.casefold() in approved_functions
-
-        if allowed:
-            return sqlite3.SQLITE_OK
-        if state.denial is None:
-            state.denial = AuthorizationDenial(action, object_name, database)
-        return sqlite3.SQLITE_DENY
-
-    return authorize
+def _interrupt_query(connection: duckdb.DuckDBPyConnection, timed_out: Event) -> None:
+    timed_out.set()
+    connection.interrupt()
 
 
 def _result_size_bytes(

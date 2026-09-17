@@ -28,12 +28,12 @@ def valid_environment():
 
 
 @pytest.fixture
-def cli_fixture(duckdb_analytical_database: Path, project_root: Path, tmp_path: Path):
+def cli_fixture(duckdb_manifest_database: Path, project_root: Path, tmp_path: Path):
     source_database = tmp_path / "source.db"
     source_database.write_bytes(b"source")
     manifest = create_manifest(
         dataset_id="test-dataset",
-        database=duckdb_analytical_database,
+        database=duckdb_manifest_database,
         source_database=source_database,
         manifest_database_path="analytical.duckdb",
         schema_git_commit="abc123",
